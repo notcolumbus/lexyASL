@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#3a3a3a" />
+    <title>Spellbound</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/app.css" />
+  </head>
+  <body>
+    <div id="stage" data-phase="attract">
+      <canvas id="wash" width="96" height="170"></canvas>
+      <div id="mirror">
+        <video id="cam" playsinline muted autoplay></video>
+      </div>
+      <div class="frost"></div>
+      <header id="hud"></header>
+      <div id="frame" data-mode="idle">
+        <div id="ghost"></div>
+        <i class="br tl"></i>
+        <i class="br tr"></i>
+        <i class="br bl"></i>
+        <i class="br rb"></i>
+      </div>
+      <p id="pop" hidden></p>
+      <div id="panel"></div>
+      <p id="live" class="sr" aria-live="polite"></p>
+    </div>
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,525 @@
+import { handIcon, paintBlur } from "./draw.js";
+import { pushFrame, startHand } from "./hand.js";
+import { ALMOST_SCORE, SUCCESS_SCORE, judge, sample } from "./signs.js";
+import {
+  accept,
+  advance,
+  almost,
+  attract,
+  begin,
+  breakdown,
+  clearAlmost,
+  lineById,
+  lineForDay,
+  markSaved,
+  meter,
+  popped,
+  targetLetter,
+  typeName,
+} from "./session.js";
+import { browserStore, load, record, todayKey, top } from "./storage.js";
+
+const HOLD_MS = 0;
+const FLASH_MS = 400;
+const ATTRACT_HOLD_MS = 320;
+const GRAB_MS = 80;
+const BLUR_MS = 120;
+
+const stage = document.querySelector("#stage");
+const wash = document.querySelector("#wash");
+const video = document.querySelector("#cam");
+const ghost = document.querySelector("#ghost");
+const hud = document.querySelector("#hud");
+const panel = document.querySelector("#panel");
+const pop = document.querySelector("#pop");
+const live = document.querySelector("#live");
+const frame = document.querySelector("#frame");
+
+const params = new URLSearchParams(location.search);
+let benchOn = params.get("bench") === "1";
+const store = browserStore();
+const today = todayKey(new Date());
+const line = lineById(params.get("line")) || lineForDay(today);
+
+let data = load(store);
+let state = attract();
+let camOn = false;
+let camFailed = false;
+let armed = false;
+let stream = null;
+let prevLm = null;
+let nextLm = null;
+let lmAt = 0;
+let holdStart = 0;
+let lockUntil = 0;
+let flashTimer = 0;
+let sawHandAt = 0;
+let lastPaint = "";
+let ghostKey = "";
+let status = "Tap Match up!";
+let practice = false;
+let naming = false;
+let note = "";
+
+const frameTimes = [];
+const drawTimes = [];
+let lastStamp = performance.now();
+
+function say(text) {
+  if (live.textContent !== text) live.textContent = text;
+}
+
+function dispatch(next) {
+  if (next === state) return;
+  state = next;
+  render();
+}
+
+function paintKey() {
+  const board = top(data, 3).map((row) => row.name + row.points).join(",");
+  if (state.phase === "attract") return `attract:${board}:${armed}:${camFailed}:${status}`;
+  if (state.phase === "play") {
+    const fb = state.feedback;
+    return `play:${state.wordIndex}:${state.letterIndex}:${state.cleared}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
+  }
+  return `summary:${state.line.id}:${state.name}:${state.saved}:${naming}:${status}:${top(data, 3).map((row) => row.points).join()}`;
+}
+
+function render() {
+  const key = paintKey();
+  if (key === lastPaint) return;
+  lastPaint = key;
+  stage.dataset.phase = state.phase;
+  stage.classList.toggle("naming", state.phase === "summary" && naming);
+  stage.classList.toggle("pop", state.phase === "play" && popped(state));
+  stage.classList.toggle("nocam", camFailed);
+  hud.replaceChildren();
+  panel.replaceChildren();
+  const popping = state.phase === "play" && state.feedback?.kind === "success";
+  pop.textContent = popping ? `+${state.feedback.points}` : "";
+  pop.hidden = !popping;
+  if (state.phase === "attract") drawAttract();
+  else if (state.phase === "play") drawPlay();
+  else drawSummary();
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function setGhost(letter, mode) {
+  const key = `${letter}:${mode}`;
+  if (key === ghostKey) return;
+  ghostKey = key;
+  ghost.innerHTML = handIcon(letter, mode);
+}
+
+function board() {
+  const list = el("ol", "pills");
+  top(data, 3).forEach((row, index) => {
+    const item = el("li");
+    item.append(el("b", "rank", `#${index + 1}`), el("span", "", row.name));
+    list.append(item);
+  });
+  return list;
+}
+
+function ribbon(label, act) {
+  const button = el("button", "match");
+  button.type = "button";
+  button.dataset.act = act;
+  button.append(el("i", "gem"), document.createTextNode(label), el("i", "gem"));
+  return button;
+}
+
+function trouble() {
+  if (!status || !/fail|error|didn't|off|denied|not load/i.test(status)) return null;
+  return el("p", "hint", status);
+}
+
+function drawAttract() {
+  setGhost("D", "guide");
+  hud.append(el("h1", "logo", "SPELLBOUND"), board());
+  if (note) hud.append(el("p", "note", note));
+  panel.append(ribbon("Match up!", armed ? "start" : "match"));
+  const warn = trouble();
+  if (warn) panel.append(warn);
+  say(status);
+}
+
+function slots() {
+  const row = el("div", "letters");
+  state.line.words.forEach((word, wordIndex) => {
+    const group = el("span", "word");
+    for (let i = 0; i < word.length; i++) {
+      const done = wordIndex < state.wordIndex || (wordIndex === state.wordIndex && i < state.letterIndex);
+      const now = state.phase === "play" && wordIndex === state.wordIndex && i === state.letterIndex;
+      group.append(el("b", done ? "in" : now ? "now" : "wait", word[i]));
+    }
+    row.append(group);
+  });
+  return row;
+}
+
+function meterRow() {
+  const wrap = el("div", "meterwrap");
+  const bar = el("div", "meter");
+  const fill = el("span");
+  const steps = meter(state);
+  fill.style.width = `${steps === 0 ? 8 : Math.round((steps / 3) * 100)}%`;
+  bar.append(fill);
+  wrap.append(bar, el("b", popped(state) ? "mult on" : "mult", "+ 2x multiplier"));
+  return wrap;
+}
+
+function coach(text) {
+  const node = el("p", "coach");
+  const hit = text.match(/\b(index|thumb|middle|ring|pinky|pointer)\b/i);
+  if (!hit) {
+    node.textContent = text;
+    return node;
+  }
+  const at = hit.index;
+  node.append(text.slice(0, at), el("em", "", hit[0]), text.slice(at + hit[0].length));
+  return node;
+}
+
+function successBanner() {
+  const banner = el("div", "banner");
+  banner.append(el("p", "", "Success!"));
+  const bar = el("div", "bannerbar");
+  bar.append(el("span"));
+  banner.append(bar);
+  return banner;
+}
+
+function drawPlay() {
+  const letter = targetLetter(state);
+  const kind = state.feedback?.kind;
+  setGhost(letter, kind === "success" ? "ok" : kind === "almost" ? "almost" : "guide");
+  hud.append(el("h1", "score", `Score: ${state.cleared * 200}`));
+  if (kind === "success") {
+    panel.append(successBanner());
+    say(`Success! +${state.feedback.points}`);
+    return;
+  }
+  if (kind === "almost") panel.append(coach(state.feedback.text));
+  panel.append(slots(), meterRow());
+  if (camFailed) {
+    const hold = el("button", "hold", "Hold to sign");
+    hold.dataset.act = "hold";
+    hold.type = "button";
+    panel.append(hold);
+  }
+  const warn = trouble();
+  if (warn) panel.append(warn);
+  say(kind === "almost" ? state.feedback.text : `Sign ${letter}`);
+}
+
+function money(n) {
+  return n.toLocaleString("en-US");
+}
+
+function sumLine(count, label, mult) {
+  const row = el("p", "sumline");
+  row.append(document.createTextNode(`${count} ${label}`), el("i", "mx", `${mult}x`));
+  return row;
+}
+
+function nameKeys() {
+  const keys = el("div", "keys");
+  for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    const key = el("button", "", ch);
+    key.type = "button";
+    key.dataset.act = "key";
+    key.dataset.key = ch;
+    keys.append(key);
+  }
+  const back = el("button", "wide", "Delete");
+  back.type = "button";
+  back.dataset.act = "key";
+  back.dataset.key = "back";
+  const save = el("button", "wide", "Save");
+  save.type = "button";
+  save.dataset.act = "save";
+  keys.append(back, save);
+  return keys;
+}
+
+function drawSummary() {
+  const score = breakdown(state);
+  setGhost("A", "guide");
+  const title = el("h1", "sumtitle", "Translation Summary");
+  const quote = el("p", "sumquote", `“${state.line.text}”`);
+  const stack = el("div", "sumstack");
+  stack.append(
+    sumLine(score.letters, "letters", score.letterMult),
+    el("p", "sumplus", "+"),
+    sumLine(score.words, "words", score.wordMult),
+    el("p", "sumplus", "+"),
+    sumLine(1, "sentence", score.sentenceMult),
+    el("p", "sumtotal", `${money(score.total)} points`),
+  );
+  panel.append(title, quote, stack);
+  if (!state.saved) {
+    panel.append(el("p", "sumhint", "Add name and save progress"));
+    const name = el("button", "name", state.name || "Name");
+    name.type = "button";
+    name.dataset.act = "publish";
+    panel.append(name);
+    if (naming) panel.append(nameKeys());
+    if (status.startsWith("Type at least")) panel.append(el("p", "hint", status));
+  } else {
+    panel.append(el("p", "sumhint", state.streak > 1
+      ? `Day ${state.streak}. Log everyday and create a streak multiplier.`
+      : "Log everyday and create a streak multiplier."));
+    panel.append(board());
+    panel.append(ribbon("Match up!", "again"));
+  }
+  say(`Translation summary. ${money(score.total)} points.`);
+}
+
+function setMode(mode) {
+  if (frame.dataset.mode !== mode) frame.dataset.mode = mode;
+}
+
+function onLandmarks(points) {
+  if (practice) return;
+  prevLm = nextLm;
+  nextLm = points;
+  lmAt = performance.now();
+}
+
+function onStatus(text) {
+  if (status === text) return;
+  status = text;
+  render();
+}
+
+async function enableCamera() {
+  if (camOn) return true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+    });
+    video.srcObject = stream;
+    await video.play();
+    camOn = true;
+    stage.classList.add("live");
+    return true;
+  } catch {
+    camFailed = true;
+    status = "Camera is off. You can still play.";
+    return false;
+  }
+}
+
+function stopCamera() {
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  video.srcObject = null;
+  camOn = false;
+  stage.classList.remove("live");
+}
+
+function beginPlay() {
+  if (state.phase === "play") return;
+  holdStart = 0;
+  sawHandAt = 0;
+  prevLm = null;
+  nextLm = null;
+  dispatch(begin(line));
+  startHand(onStatus, onLandmarks);
+  navigator.wakeLock?.request("screen").catch(() => {});
+}
+
+async function onMatch() {
+  note = "";
+  const ok = await enableCamera();
+  startHand(onStatus, onLandmarks);
+  if (!ok) {
+    beginPlay();
+    return;
+  }
+  armed = true;
+  status = "Show your hand, or tap Start.";
+  render();
+}
+
+function finishFlash() {
+  dispatch(advance(state));
+  lockUntil = performance.now() + 220;
+  holdStart = 0;
+  if (state.phase === "summary") naming = false;
+}
+
+function saveScore() {
+  const next = markSaved(state);
+  if (next === state) {
+    status = "Type at least two letters.";
+    render();
+    return;
+  }
+  const saved = record(store, data, next.name, breakdown(next).total, today);
+  data = saved.data;
+  note = "";
+  naming = false;
+  status = "";
+  dispatch({ ...next, streak: saved.streak });
+}
+
+stage.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-act]");
+  if (!button) return;
+  const act = button.dataset.act;
+  if (act === "match") onMatch();
+  if (act === "start") beginPlay();
+  if (act === "publish") {
+    naming = true;
+    status = "";
+    render();
+  }
+  if (act === "again") {
+    stopCamera();
+    armed = false;
+    camFailed = false;
+    naming = false;
+    note = "";
+    status = "Tap Match up!";
+    dispatch(attract());
+  }
+  if (act === "key") dispatch(typeName(state, button.dataset.key));
+  if (act === "save") saveScore();
+});
+
+stage.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest("[data-act=hold]") || state.phase !== "play") return;
+  practice = true;
+  prevLm = nextLm;
+  nextLm = sample(targetLetter(state));
+  lmAt = performance.now();
+});
+
+window.addEventListener("pointerup", () => {
+  if (!practice) return;
+  practice = false;
+  nextLm = null;
+  holdStart = 0;
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.repeat) return;
+  if (state.phase === "play" && event.key.toUpperCase() === targetLetter(state)) {
+    dispatch(accept(state));
+    window.clearTimeout(flashTimer);
+    flashTimer = window.setTimeout(finishFlash, FLASH_MS);
+    return;
+  }
+  if (state.phase !== "summary" || state.saved) return;
+  if (event.key === "Backspace") dispatch(typeName(state, "back"));
+  else if (/^[a-zA-Z]$/.test(event.key)) dispatch(typeName(state, event.key.toUpperCase()));
+  else if (event.key === "Enter") saveScore();
+});
+
+function tick(now) {
+  if (state.phase === "attract") {
+    if (nextLm && camOn) {
+      if (!sawHandAt) sawHandAt = now;
+      setMode("hot");
+      if (now - sawHandAt >= ATTRACT_HOLD_MS) beginPlay();
+    } else {
+      sawHandAt = 0;
+      setMode("idle");
+    }
+    return;
+  }
+  if (state.phase !== "play" || now < lockUntil || state.feedback?.kind === "success") return;
+  if (!nextLm) {
+    holdStart = 0;
+    setMode("idle");
+    dispatch(clearAlmost(state));
+    return;
+  }
+  const result = judge(nextLm, targetLetter(state));
+  if (result.score >= SUCCESS_SCORE) {
+    if (!holdStart) holdStart = now;
+    setMode("ok");
+    if (now - holdStart >= HOLD_MS) {
+      holdStart = 0;
+      dispatch(accept(state));
+      window.clearTimeout(flashTimer);
+      flashTimer = window.setTimeout(finishFlash, FLASH_MS);
+    }
+    return;
+  }
+  if (holdStart && result.score >= ALMOST_SCORE && now - holdStart < HOLD_MS + 160) return;
+  holdStart = 0;
+  if (result.score >= ALMOST_SCORE) {
+    setMode("almost");
+    dispatch(almost(state, result.correction));
+  } else {
+    setMode("idle");
+    dispatch(clearAlmost(state));
+  }
+}
+
+let lastBlur = 0;
+let lastGrab = 0;
+
+function loop(now) {
+  if (benchOn) frameTimes.push(now - lastStamp);
+  lastStamp = now;
+  const started = benchOn ? performance.now() : 0;
+  tick(now);
+  if (camOn && (state.phase === "attract" || state.phase === "summary") && now - lastBlur >= BLUR_MS && video.readyState >= 2) {
+    lastBlur = now;
+    paintBlur(video, wash);
+  }
+  if (camOn && state.phase !== "summary" && now - lastGrab >= GRAB_MS) {
+    lastGrab = now;
+    pushFrame(video);
+  }
+  if (benchOn) {
+    drawTimes.push(performance.now() - started);
+    if (frameTimes.length >= 180) {
+      benchOn = false;
+      reportBench();
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function median(values) {
+  const copy = values.slice().sort((a, b) => a - b);
+  return copy[Math.floor(copy.length / 2)];
+}
+
+function reportBench() {
+  const gaps = frameTimes.slice(20);
+  const draws = drawTimes.slice(20);
+  const payload = {
+    frames: gaps.length,
+    gapP50: Number(median(gaps).toFixed(2)),
+    gapMax: Number(Math.max(...gaps).toFixed(2)),
+    drawP50: Number(median(draws).toFixed(2)),
+    drawMax: Number(Math.max(...draws).toFixed(2)),
+  };
+  document.title = `gap ${payload.gapP50} draw ${payload.drawP50}`;
+  console.log(JSON.stringify(payload));
+  const node = document.createElement("pre");
+  node.id = "bench";
+  node.textContent = JSON.stringify(payload);
+  document.body.append(node);
+}
+
+render();
+requestAnimationFrame(loop);
