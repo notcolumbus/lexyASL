@@ -36,6 +36,7 @@ test("each word is spelled, then signed, and the line scores every step", () => 
     const signed = line.words.filter((w) => WORD_SIGNS[w]).length;
     assert.equal(state.points, letters * 280 + signed * 500);
     const score = breakdown(state);
+    assert.equal(score.words, line.words.length, `${line.text}: every finished word counts`);
     assert.equal(score.total, letters * 280 * (letters >= 3 ? 2 : 1) + signed * 500 * 3 + 2000);
     let perfect = begin(line);
     while (perfect.phase === "play") perfect = advance(accept(perfect, 1));

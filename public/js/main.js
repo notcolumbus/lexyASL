@@ -30,7 +30,7 @@ import { browserStore, load, pullScores, pushScore, record, todayKey, top } from
 // A letter must stay right this long before it counts, so a hand passing through a shape doesn't score.
 const HOLD_MS = 350;
 // Long enough for the success beat: +points pops, flies to the score, banner slides through.
-const FLASH_MS = 1100;
+const FLASH_MS = 1600;
 const ATTRACT_HOLD_MS = 320;
 // Word step: PopSign's model reads the last 2 s of one hand, resampled to its 60 frames.
 const WORD_WINDOW_MS = 2000;
@@ -85,6 +85,8 @@ let draftName = "";
 let nameError = "";
 let lastLineId = "";
 let wordShown = -1;
+// The how-to hint shows only once this step has had a failed try.
+let hintFor = "";
 let trail = [];
 let wordSince = 0;
 let lastWordAt = 0;
@@ -117,7 +119,7 @@ function paintKey() {
   if (state.phase === "attract") return `attract:${board}:${armed}:${camFailed}:${trouble() ? status : ""}`;
   if (state.phase === "play") {
     const fb = state.feedback;
-    return `play:${state.wordIndex}:${state.letterIndex}:${state.signing}:${state.points}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
+    return `play:${step()}:${hintFor === step()}:${state.points}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
   }
   return `summary:${state.line.id}:${state.saved}:${nameError}:${board}`;
 }
@@ -198,11 +200,27 @@ function board(style) {
   return list;
 }
 
-function ribbon(label, act, tone = "") {
-  const button = el("button", `match ${tone}`);
+// Frame 34's variants. The home ribbon cycles them; elsewhere it's just the first.
+const RIBBONS = [
+  ["Match up!", "orange"],
+  ["Learn ASL!", "violet"],
+  ["Hand-writing!", "yellow"],
+];
+
+function ribbon(act, cycle = false) {
+  const button = el("button", cycle ? "match cycle" : "match");
   button.type = "button";
   button.dataset.act = act;
-  button.append(el("i", "gem top"), el("span", "label", label), el("i", "gem bottom"));
+  button.setAttribute("aria-label", "Match up!");
+  (cycle ? RIBBONS : RIBBONS.slice(0, 1)).forEach(([label, tone], n) => {
+    const face = el("span", `face ${tone}`);
+    face.style.setProperty("--n", n);
+    face.setAttribute("aria-hidden", "true");
+    const body = el("span", "body");
+    body.append(el("i", "gem top"), el("span", "label", label), el("i", "gem bottom"));
+    face.append(body);
+    button.append(face);
+  });
   return button;
 }
 
@@ -214,7 +232,7 @@ function trouble() {
 function drawAttract() {
   setGhost("D", "guide");
   hud.append(el("h1", "logo", "SPELLBOUND"), board("home"));
-  panel.append(ribbon("Match up!", armed ? "start" : "match"));
+  panel.append(ribbon(armed ? "start" : "match", true));
   const warn = trouble();
   if (warn) panel.append(warn);
   say(status);
@@ -247,7 +265,18 @@ function meterRow() {
   return wrap;
 }
 
+function step() {
+  return `${state.wordIndex}:${state.letterIndex}:${state.signing}`;
+}
+
+function failedTry() {
+  if (hintFor === step()) return;
+  hintFor = step();
+  render();
+}
+
 function coach(text) {
+  if (hintFor !== step()) return "";
   const node = el("p", "coach");
   const hit = text.match(/\b(index|thumb|middle|ring|pinky|pointer)\b/i);
   if (!hit) {
@@ -268,7 +297,6 @@ function footer() {
     pub.append("Publish your score ", el("span", "", `(${money(state.points)})`));
     row.append(pub);
   } else row.append(el("span"));
-  row.append(el("p", "skiphint", "Space to skip"));
   // Design: the next word shows only while you're on the current word's last letter.
   const word = state.line.words[state.wordIndex] || "";
   const next = !state.signing && state.letterIndex === word.length - 1 ? nextWord(state) : "";
@@ -405,7 +433,7 @@ function drawSummary() {
     if (nameError) panel.append(el("p", "hint", nameError));
     window.setTimeout(() => input.focus({ preventScroll: true }), 50);
   } else {
-    panel.append(board("list"), ribbon("Match up!", "again"));
+    panel.append(board("list"), ribbon("again"));
   }
   say(`Summary. ${money(score.total)} points. ${state.line.text} ${state.line.by}.`);
 }
@@ -462,6 +490,7 @@ function beginPlay() {
   nextLm = null;
   draftName = "";
   nameError = "";
+  hintFor = "";
   const line = fixedLine || randomLine(lastLineId);
   lastLineId = line.id;
   wordShown = -1;
@@ -658,6 +687,7 @@ function wordTick(now) {
     }
   }
   setMode(inTop ? "ok" : best >= 0.02 || moving ? "almost" : "hot");
+  if (!inTop && moving) failedTry();
   // 5% -> fewest points, 60%+ -> most.
   if (inTop) passWord((best - WORD_MIN_P) / (0.6 - WORD_MIN_P));
 }
@@ -704,6 +734,7 @@ function tick(now) {
   holdStart = 0;
   if (result.score >= ALMOST_SCORE) {
     setMode("almost");
+    hintFor = step();
     dispatch(almost(state, result.correction));
   } else {
     setMode("idle");

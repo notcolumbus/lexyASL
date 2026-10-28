@@ -49,6 +49,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   inset: 10px;
   border: 3px solid rgba(255, 255, 255, 0.92);
   border-radius: 26px;
+  mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 6;
 }
@@ -425,13 +426,9 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   animation: scalein 460ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 
-.meterwrap { position: relative; height: 40px; }
+.meterwrap { display: grid; gap: 8px; }
 
 .meter {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 6px;
   height: 28px;
   border: 4px solid var(--ink);
   border-radius: 20px;
@@ -447,10 +444,9 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   transition: width 400ms cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 
+/* Under the bar, bottom right. */
 .mult {
-  position: absolute;
-  right: -4px;
-  top: 0;
+  justify-self: end;
   background: #fff;
   border: 4px solid var(--ink);
   border-radius: 14px;
@@ -495,7 +491,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   animation: rise 400ms backwards;
 }
 .pubnow span { color: #9a9a9a; }
-.skiphint { margin: 0; font-weight: 800; font-size: 13px; color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
 .nextword {
   margin: 0 -18px 0 0;
   background: #fff;
@@ -546,46 +541,81 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   background: repeating-linear-gradient(-55deg, #fff 0 8px, #ececec 8px 16px);
   overflow: hidden;
 }
-.bannerbar span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 20px; animation: fill 1000ms linear forwards; }
+.bannerbar span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 20px; animation: fill 1500ms linear forwards; }
 @keyframes fill { to { width: 100%; } }
 
-/* Ribbon button: striped, notched ends, gems on its pinstripes; it keeps gently swaying. */
+/* Ribbon button, Frame 34: a tilted striped band with a notched right end, a light bevel on top,
+   a hard black shadow, pinstripes with diamonds, and a thick colored outline on the label.
+   On the home page its three variants (Match up! / Learn ASL! / Hand-writing!) take turns. */
 .match {
   position: relative;
   display: grid;
-  place-items: center;
-  width: calc(100% + 36px);
-  margin: 0 -18px;
+  /* As in Frame 34: the left end runs off the screen, the notched right end stays in view. */
+  width: calc(100% + 44px);
+  margin: 0 0 18px -54px;
   border: 0;
-  padding: 28px 16px 30px;
+  padding: 0;
+  background: none;
+  transform-origin: 50% 60%;
+  animation: rise 500ms backwards, sway 2.6s 600ms ease-in-out infinite;
+}
+.face {
+  grid-area: 1 / 1;
+  display: grid;
+  filter: drop-shadow(0 8px 0 var(--ink));
+  transform: rotate(-4deg);
+}
+.face .body {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(100px, 14vh, 128px);
+  /* Centre the label on the part of the band that's on screen. */
+  padding: 0 8% 0 60px;
+  background:
+    linear-gradient(90deg, transparent 15%, var(--c2) 72%),
+    repeating-linear-gradient(-55deg, rgba(255, 255, 255, 0.2) 0 20px, transparent 20px 46px) 0 0 / 200% 100%,
+    linear-gradient(90deg, var(--c1), var(--c2));
+  box-shadow: inset 0 6px 0 var(--bevel), inset 0 -6px 0 var(--deep);
+  clip-path: polygon(0 0, 100% 0, 95% 50%, 100% 100%, 0 100%);
+  animation: stripes 2.2s linear infinite;
+}
+.face .body::before, .face .body::after {
+  content: "";
+  position: absolute;
+  left: 2%;
+  right: 9%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #fff 12%, #fff 88%, transparent);
+}
+.face .body::before { top: 19%; }
+.face .body::after { bottom: 19%; }
+.gem { position: absolute; left: calc(50% + 24px); width: 15px; height: 15px; background: #fff; transform: translateX(-50%) rotate(45deg); z-index: 1; }
+.gem.top { top: calc(19% - 6px); }
+.gem.bottom { bottom: calc(19% - 6px); }
+.face .label {
   color: #fff;
   font-family: "Lilita One", "Arial Black", sans-serif;
   font-size: clamp(40px, 7vh, 58px);
-  background:
-    repeating-linear-gradient(-55deg, rgba(255, 255, 255, 0.12) 0 18px, transparent 18px 40px) 0 0 / 200% 100%,
-    linear-gradient(to bottom, #ff8a00, var(--ribbon) 60%, #e44f00);
-  clip-path: polygon(0 18%, 94% 0, 100% 46%, 96% 100%, 0 100%);
-  filter: drop-shadow(0 8px 0 var(--ink));
-  transform-origin: 50% 60%;
-  animation: rise 500ms backwards, sway 2.6s 600ms ease-in-out infinite, stripes 2.2s linear infinite;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-text-stroke: 9px var(--line);
+  paint-order: stroke fill;
 }
-.match .label { text-shadow: 0 4px 0 #9b3200, 0 0 1px var(--ink); -webkit-text-stroke: 1px #9b3200; transform: rotate(-4deg); }
-.match::before, .match::after {
-  content: "";
-  position: absolute;
-  left: 4%;
-  right: 6%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.9);
+.face.yellow .label { font-size: clamp(34px, 6vh, 48px); }
+.face.orange { --c1: #f59a31; --c2: #ec6223; --bevel: #fbb46c; --deep: #c94d16; --line: #e5541a; }
+.face.violet { --c1: #ec9ff0; --c2: #d878df; --bevel: #f6c9f8; --deep: #a94cb3; --line: #b552c4; }
+.face.yellow { --c1: #ffe56b; --c2: #f8c51c; --bevel: #fff3a8; --deep: #c99300; --line: #e39a0c; }
+/* Timer between variants, as in the prototype: each face holds ~1.6 s, then the next pops in. */
+.match.cycle .face { opacity: 0; animation: variant 4.8s calc(var(--n) * 1.6s) infinite backwards; }
+@keyframes variant {
+  0% { opacity: 0; transform: rotate(-4deg) scale(0.94); }
+  4% { opacity: 1; transform: rotate(-4deg) scale(1.04); }
+  8%, 35% { opacity: 1; transform: rotate(-4deg); }
+  39%, 100% { opacity: 0; transform: rotate(-4deg); }
 }
-.match::before { top: 22%; transform: rotate(-4deg); }
-.match::after { bottom: 16%; transform: rotate(-4deg); }
-.gem { position: absolute; left: 50%; width: 14px; height: 14px; background: #fff; transform: translateX(-50%) rotate(45deg); z-index: 1; }
-.gem.top { top: calc(22% - 13px); }
-.gem.bottom { bottom: calc(16% - 6px); }
-.match.yellow { background: repeating-linear-gradient(-55deg, rgba(255, 255, 255, 0.16) 0 18px, transparent 18px 40px) 0 0 / 200% 100%, linear-gradient(to bottom, #ffe34a, var(--gold)); }
 @keyframes sway { 0%, 100% { transform: rotate(0deg) translateY(0); } 50% { transform: rotate(-1.6deg) translateY(-4px); } }
-@keyframes stripes { to { background-position: 100% 0, 0 0; } }
+@keyframes stripes { to { background-position: 0 0, 100% 0, 0 0; } }
 
 .hold {
   border: 3px solid var(--ink);
@@ -730,7 +760,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 #stage:not(.fresh) .sumquote,
 #stage:not(.fresh) .sumby,
 #stage:not(.fresh) .nameform { animation: none; }
-#stage:not(.fresh) .match { animation: sway 2.6s ease-in-out infinite, stripes 2.2s linear infinite; }
+#stage:not(.fresh) .match { animation: sway 2.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }

@@ -81,10 +81,13 @@ export function pointsFor(signing, accuracy) {
 export function accept(state, accuracy = 0.5) {
   if (state.phase !== "play" || state.feedback?.kind === "success") return state;
   const points = pointsFor(state.signing, accuracy);
+  const word = state.line.words[state.wordIndex];
+  // A word counts once it's done: signed, or its last letter spelled when it has no sign step.
+  const wordDone = state.signing || (state.letterIndex === word.length - 1 && !WORD_SIGNS[word]);
   return {
     ...state,
     cleared: state.signing ? state.cleared : state.cleared + 1,
-    signed: state.signing ? state.signed + 1 : state.signed,
+    signed: state.signed + (wordDone ? 1 : 0),
     points: state.points + points,
     letterPoints: state.letterPoints + (state.signing ? 0 : points),
     wordPoints: state.wordPoints + (state.signing ? points : 0),
