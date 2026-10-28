@@ -564,7 +564,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   padding: 0;
   background: none;
   transform-origin: 50% 60%;
-  animation: rise 500ms backwards, sway 2.6s 600ms ease-in-out infinite;
+  animation: rise 500ms backwards;
 }
 .face {
   grid-area: 1 / 1;
@@ -614,15 +614,13 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .face.orange { --c1: #f59a31; --c2: #ec6223; --bevel: #fbb46c; --deep: #c94d16; --line: #e5541a; }
 .face.violet { --c1: #ec9ff0; --c2: #d878df; --bevel: #f6c9f8; --deep: #a94cb3; --line: #b552c4; }
 .face.yellow { --c1: #ffe56b; --c2: #f8c51c; --bevel: #fff3a8; --deep: #c99300; --line: #e39a0c; }
-/* Timer between variants, as in the prototype: each face holds ~1.6 s, then the next pops in. */
+/* Timer between variants, as in the prototype: each face holds ~1.6 s, then the next fades in. The band itself stays still. */
 .match.cycle .face { opacity: 0; animation: variant 4.8s calc(var(--n) * 1.6s) infinite backwards; }
 @keyframes variant {
-  0% { opacity: 0; transform: rotate(-4deg) scale(0.94); }
-  4% { opacity: 1; transform: rotate(-4deg) scale(1.04); }
-  8%, 35% { opacity: 1; transform: rotate(-4deg); }
-  39%, 100% { opacity: 0; transform: rotate(-4deg); }
+  0% { opacity: 0; }
+  4%, 35% { opacity: 1; }
+  39%, 100% { opacity: 0; }
 }
-@keyframes sway { 0%, 100% { transform: rotate(0deg) translateY(0); } 50% { transform: rotate(-1.6deg) translateY(-4px); } }
 @keyframes stripes { to { background-position: 0 0, 100% 0, 0 0; } }
 
 .hold {
@@ -770,7 +768,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 #stage:not(.fresh) .sumquote,
 #stage:not(.fresh) .sumby,
 #stage:not(.fresh) .nameform { animation: none; }
-#stage:not(.fresh) .match { animation: sway 2.6s ease-in-out infinite; }
+#stage:not(.fresh) .match { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
