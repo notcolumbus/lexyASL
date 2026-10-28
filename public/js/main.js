@@ -357,15 +357,38 @@ const SWOOSH = `<svg class="swoosh" viewBox="0 0 400 520" aria-hidden="true">
   <path d="M300 340 C 345 380, 360 430, 350 480" /><circle cx="322" cy="372" r="16" /><path d="M335 470 l 0 22" /><path d="M324 481 l 22 0" />
 </svg>`;
 
-// Success beat: green swooshes draw in, confetti bursts from the hand, +points pops by the hand
-// then flies to the score, and the score ticks up when it lands.
+const CONFETTI = ["#7cff14", "#ffe14a", "#ffffff", "#f06000", "#e070f0", "#5ee0ff"];
+
+// Confetti: bits burst out of the hand, then tumble and drift down as they fade. Each bit gets its own
+// direction, spin and shape, so no two bursts look the same.
+function confetti() {
+  const burst = el("div", "confetti");
+  for (let i = 0; i < 34; i++) {
+    const bit = el("i", ["strip", "dot", "star", "squiggle"][i % 4]);
+    const angle = (i / 34) * Math.PI * 2 + Math.random() * 0.4;
+    const reach = 110 + Math.random() * 120;
+    bit.style.setProperty("--dx", `${Math.cos(angle) * reach}px`);
+    bit.style.setProperty("--dy", `${Math.sin(angle) * reach * 0.8 - 40}px`);
+    bit.style.setProperty("--r", `${(Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540)}deg`);
+    bit.style.setProperty("--c", CONFETTI[i % CONFETTI.length]);
+    bit.style.setProperty("--d", `${Math.random() * 90}ms`);
+    bit.style.setProperty("--t", `${1050 + Math.random() * 400}ms`);
+    burst.append(bit);
+  }
+  return burst;
+}
+
+// Success beat: confetti bursts from the hand, green swooshes draw in and slither off, +points pops
+// by the hand, then arcs up into the score, which gulps it down.
 function celebrate(points, sign) {
   fx.innerHTML = SWOOSH;
+  fx.append(confetti());
   const big = el("p", sign.length > 1 ? "bigsign word" : "bigsign", sign);
   fx.append(big);
   pop.textContent = `+${points}`;
   pop.hidden = false;
   pop.classList.remove("fly");
+  pop.getAnimations().forEach((a) => a.cancel());
   void pop.offsetWidth;
   const score = hud.querySelector(".score");
   window.setTimeout(() => {
@@ -373,15 +396,27 @@ function celebrate(points, sign) {
     // Aim the middle of +points at the number end of "Score: N".
     const from = pop.getBoundingClientRect();
     const to = score.getBoundingClientRect();
-    pop.style.setProperty("--fx", `${to.right - 50 - (from.left + from.width / 2)}px`);
-    pop.style.setProperty("--fy", `${to.top + to.height / 2 - (from.top + from.height / 2)}px`);
+    const dx = to.right - 24 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     pop.classList.add("fly");
+    score.classList.add("hungry");
+    // Up and over in an arc, shrinking into the number as it lands.
+    pop.animate(
+      [
+        { transform: "translateX(-50%) rotate(-8deg) scale(1)", opacity: 1 },
+        { transform: `translateX(-50%) translate(${dx * 0.4}px, ${dy * 0.55 - 36}px) rotate(-14deg) scale(0.8)`, opacity: 1, offset: 0.45 },
+        { transform: `translateX(-50%) translate(${dx}px, ${dy}px) rotate(0deg) scale(0.05)`, opacity: 0 },
+      ],
+      { duration: 440, easing: "cubic-bezier(0.45, 0, 0.8, 0.6)", fill: "forwards" },
+    );
   }, 520);
+  // A timer, not the flight's finish event: the score must update even where animations don't run.
   window.setTimeout(() => {
     if (!score?.isConnected) return;
     score.textContent = `Score: ${money(state.points)}`;
-    score.classList.add("bump");
-  }, 900);
+    score.classList.remove("hungry");
+    score.classList.add("gulp");
+  }, 960);
   const mine = fx.firstChild;
   window.setTimeout(() => {
     if (fx.firstChild === mine) fx.innerHTML = "";
@@ -514,6 +549,7 @@ async function onMatch() {
 function finishFlash() {
   pop.hidden = true;
   pop.classList.remove("fly");
+  pop.getAnimations().forEach((anim) => anim.cancel());
   dispatch(advance(state));
   lockUntil = performance.now() + 220;
   holdStart = 0;

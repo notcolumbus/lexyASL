@@ -218,6 +218,8 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* Score sits top-left in play, and bumps when the flying +points lands. */
 .score {
+  /* Only as wide as its text, so the flying +points can aim at the number's end. */
+  width: fit-content;
   margin: 8px 0 0;
   text-align: left;
   font-family: var(--title);
@@ -231,8 +233,16 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   letter-spacing: 0.01em;
   transform-origin: left center;
 }
-.score.bump { animation: bump 380ms cubic-bezier(0.2, 1.6, 0.4, 1); }
-@keyframes bump { 40% { transform: scale(1.18); } }
+/* As +points flies in the score leans in for it, then gulps it down. */
+.score.hungry { transform: scale(1.1); transition: transform 300ms cubic-bezier(0.3, 1.4, 0.5, 1); }
+.score.gulp { animation: gulp 460ms cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes gulp {
+  0% { transform: scale(1.1); }
+  25% { transform: scale(1.32, 0.78); }
+  55% { transform: scale(0.9, 1.14); }
+  80% { transform: scale(1.06, 0.96); }
+  100% { transform: none; }
+}
 
 #frame {
   left: 50%;
@@ -298,7 +308,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; }
 .rb { bottom: 0; right: 0; border-left: 0; border-top: 0; }
 
-/* Success effects layer: swooshes draw themselves in, confetti flies out of the hand. */
+/* Success effects layer: swooshes draw themselves in then slither off, confetti flies out of the hand. */
 #fx { inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
 .swoosh { position: absolute; left: 0; top: 14%; width: 100%; height: 58%; }
 .swoosh path, .swoosh circle {
@@ -309,12 +319,37 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   stroke-dasharray: 400;
   stroke-dashoffset: 400;
   filter: drop-shadow(0 0 4px rgba(124, 255, 20, 0.7));
-  animation: draw 520ms cubic-bezier(0.3, 0.8, 0.3, 1) forwards;
+  animation: slither 1250ms cubic-bezier(0.4, 0.1, 0.3, 1) forwards;
 }
-.swoosh .dot { fill: var(--green); stroke: none; animation: scalein 300ms 200ms both; transform-box: fill-box; transform-origin: center; }
+.swoosh .dot { fill: var(--green); stroke: none; animation: twinkle 900ms 200ms both; transform-box: fill-box; transform-origin: center; }
 .swoosh :nth-child(3n) { animation-delay: 80ms; }
 .swoosh :nth-child(3n + 1) { animation-delay: 160ms; }
-@keyframes draw { to { stroke-dashoffset: 0; } }
+/* The head draws the line in, then the tail chases it off: the stroke slides away like a snake. */
+@keyframes slither { 0% { stroke-dashoffset: 400; } 45% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -400; } }
+@keyframes twinkle { 0% { transform: scale(0); } 30% { transform: scale(1.4); } 60% { transform: scale(0.9); } 100% { transform: scale(0); } }
+
+/* Confetti: each bit bursts out fast, then tumbles and drifts down as it fades. */
+.confetti { position: absolute; left: 50%; top: 40%; width: 0; height: 0; perspective: 400px; }
+.confetti i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 16px;
+  background: var(--c);
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c) 70%, transparent);
+  opacity: 0;
+  animation: confetti var(--t) var(--d) cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+.confetti .dot { width: 11px; height: 11px; border-radius: 50%; }
+.confetti .star { width: 18px; height: 18px; border-radius: 0; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); box-shadow: none; filter: drop-shadow(0 0 4px var(--c)); }
+.confetti .squiggle { width: 22px; height: 8px; background: none; border: 3px solid var(--c); border-top: 0; border-radius: 0 0 12px 12px; box-shadow: none; }
+@keyframes confetti {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.2) rotate(0deg); }
+  30% { opacity: 1; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1) rotate(calc(var(--r) * 0.35)) rotateX(180deg); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx) * 1.25), calc(-50% + var(--dy) + 170px)) scale(0.8) rotate(var(--r)) rotateX(900deg); }
+}
 /* The letter (or word) just signed, big and glowing under the hand. */
 .bigsign {
   position: absolute;
@@ -352,13 +387,8 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   z-index: 5;
   animation: popin 420ms cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
-/* The pop-in animation has to let go of transform, or the flight never moves. */
-#pop.fly {
-  animation: none;
-  transition: transform 380ms cubic-bezier(0.55, 0, 0.75, 0.35), opacity 380ms ease-in;
-  transform: translateX(-50%) translate(var(--fx), var(--fy)) rotate(0deg) scale(0.35);
-  opacity: 0.4;
-}
+/* The pop-in animation has to let go of transform so the flight (a Web Animation) can take over. */
+#pop.fly { animation: none; }
 #pop[hidden] { display: none; }
 @keyframes popin { from { transform: translateX(-50%) rotate(-8deg) scale(0); } to { transform: translateX(-50%) rotate(-8deg) scale(1); } }
 
