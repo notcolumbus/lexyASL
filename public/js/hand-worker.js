@@ -33,10 +33,10 @@ self.onmessage = async (event) => {
       const result = landmarker.detectForVideo(msg.bitmap, (lastStamp = Math.max(lastStamp + 1, performance.now())));
       msg.bitmap.close();
       const raw = result.landmarks && result.landmarks[0] ? result.landmarks[0] : null;
-      // Training frames are right hands in selfie view; the camera buffer is not mirrored.
-      // MediaPipe labels handedness as if the image were mirrored, so on this raw buffer a real
-      // left hand reads "Right". Leaving that one unflipped turns it into a right hand for the model.
-      const left = result.handedness?.[0]?.[0]?.categoryName === "Right";
+      // Training frames are right hands in selfie view; the camera buffer is not mirrored, so flip x.
+      // A left hand is already the mirror of a right one, so it stays unflipped. On this raw buffer
+      // MediaPipe's "Left" label is the player's left hand: the opposite guess read a real B as W.
+      const left = result.handedness?.[0]?.[0]?.categoryName === "Left";
       const points = raw
         ? raw.map((p) => ({ x: left ? p.x : 1 - p.x, y: p.y, z: p.z || 0 }))
         : null;
