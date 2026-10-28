@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "lexy-asl",
+  "name": "lexyasl",
   "account_id": "f5a01b2a1b774ef900536723435cd5d0",
   "main": "src/index.js",
   "compatibility_date": "2026-10-27",
