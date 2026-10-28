@@ -39,7 +39,7 @@ test("a folded index on L is a miss that names the index finger", () => {
   const result = judge(lm, "L");
   assert.ok(result.score < SUCCESS_SCORE, String(result.score));
   assert.ok(result.score >= ALMOST_SCORE, String(result.score));
-  assert.match(result.correction, /index/i);
+  assert.match(result.correction, /pointer/i);
 });
 
 test("lines only use letters the matcher knows", () => {

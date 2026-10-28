@@ -198,6 +198,8 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 .sign {
   display: block;
+  /* The pictures are drawn as you'd see someone else; the camera is a mirror. Flip to match. */
+  transform: scaleX(-1);
   width: min(78%, 240px);
   height: auto;
 }

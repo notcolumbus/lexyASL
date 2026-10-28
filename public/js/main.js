@@ -1,6 +1,6 @@
 import { handIcon, paintBlur } from "./draw.js";
 import { pushFrame, startHand } from "./hand.js";
-import { ALMOST_SCORE, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
+import { ALMOST_SCORE, HOW, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
 import {
   accept,
   advance,
@@ -227,8 +227,8 @@ function drawPlay() {
     say(`Success! +${state.feedback.points}`);
     return;
   }
-  if (kind === "almost") panel.append(coach(state.feedback.text));
-  panel.append(slots(), meterRow());
+  // The how-to stays up the whole time: the blanks hide the letter, this says how to make it.
+  panel.append(coach(HOW[letter]), slots(), meterRow());
   if (camFailed) panel.append(holdButton());
   const warn = trouble();
   if (warn) panel.append(warn);
