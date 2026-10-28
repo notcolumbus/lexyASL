@@ -15,10 +15,10 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
-  "r2_buckets": [
+  "kv_namespaces": [
     {
       "binding": "BOARD",
-      "bucket_name": "lexy-asl-board"
+      "id": "9fd134b80a954494b1cc93df58d5715d"
     }
   ]
 }

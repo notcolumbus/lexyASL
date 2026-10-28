@@ -16,33 +16,17 @@ function todayUtc(now) {
   return now.toISOString().slice(0, 10);
 }
 
-async function readBoard(bucket) {
-  const object = await bucket.get(KEY);
-  if (!object) return { board: emptyBoard(), etag: "" };
-  try {
-    const data = await object.json();
-    if (!data || !Array.isArray(data.scores)) return { board: emptyBoard(), etag: object.httpEtag || "" };
-    return { board: data, etag: object.httpEtag || "" };
-  } catch {
-    return { board: emptyBoard(), etag: object.httpEtag || "" };
-  }
+async function readBoard(kv) {
+  const data = await kv.get(KEY, "json").catch(() => null);
+  return data && Array.isArray(data.scores) ? data : emptyBoard();
 }
 
-async function writeScore(bucket, entry) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const current = await readBoard(bucket);
-    const next = addScore(current.board, entry);
-    const put = await bucket.put(KEY, JSON.stringify(next), {
-      httpMetadata: { contentType: "application/json" },
-      onlyIf: current.etag ? { etagMatches: current.etag } : undefined,
-    });
-    if (put) {
-      console.log(JSON.stringify({ event: "board_write", name: entry.name, points: entry.points }));
-      return next;
-    }
-  }
-  const latest = await readBoard(bucket);
-  return latest.board;
+// ponytail: KV has no compare-and-swap, so simultaneous submissions can drop one; move to a Durable Object if traffic grows.
+async function writeScore(kv, entry) {
+  const next = addScore(await readBoard(kv), entry);
+  await kv.put(KEY, JSON.stringify(next));
+  console.log(JSON.stringify({ event: "board_write", name: entry.name, points: entry.points }));
+  return next;
 }
 
 export default {
@@ -55,8 +39,7 @@ export default {
       return json({ error: "Leaderboard storage is not connected." }, 503);
     }
     if (request.method === "GET") {
-      const current = await readBoard(env.BOARD);
-      return json(publicBoard(current.board));
+      return json(publicBoard(await readBoard(env.BOARD)));
     }
     if (request.method === "POST") {
       let body;

@@ -26,4 +26,4 @@ Repository secrets, set under Settings → Secrets and variables → Actions:
 - `CLOUDFLARE_API_TOKEN` — API token with permission to edit Workers on this account
 - `CLOUDFLARE_ACCOUNT_ID` — the account id in `wrangler.jsonc`
 
-The Worker binds an R2 bucket named `lexy-asl-board`. Enable R2 on the account and create that bucket before the first deploy.
+The leaderboard lives in a Workers KV namespace bound as `BOARD` (id in `wrangler.jsonc`).
