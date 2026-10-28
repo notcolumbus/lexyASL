@@ -231,6 +231,12 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   border-radius: 18px;
 }
 
+/* Corners show what the camera sees: hand found, sign right, sign close. */
+#frame .br { transition: border-color 120ms; }
+#frame[data-mode="hot"] .br { border-color: var(--dash); }
+#frame[data-mode="ok"] .br { border-color: var(--green); }
+#frame[data-mode="almost"] .br { border-color: var(--orange); }
+
 .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; }
 .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; }
 .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; }

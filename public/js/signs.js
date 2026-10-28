@@ -137,10 +137,13 @@ function read(lm) {
   return kept.map((v) => v / total);
 }
 
-// Pointer up, other fingers folded: a plain geometry rule, so the kiosk wakes for any pointing finger.
+// Pointer straight, the other three bent: a plain geometry rule, so the kiosk wakes for any pointing finger.
+// Bent, not folded: in a real D those fingers curve round to the thumb and read only ~0.2-0.4 curled.
 export function pointingUp(lm) {
   const f = curls(lm);
-  return !!f && f.index < 0.35 && f.middle > 0.45 && f.ring > 0.45 && f.pinky > 0.45;
+  if (!f) return false;
+  const rest = [f.middle, f.ring, f.pinky];
+  return f.index < 0.3 && Math.min(...rest) > 0.15 && (f.middle + f.ring + f.pinky) / 3 > 0.35;
 }
 
 export function judge(lm, letter) {

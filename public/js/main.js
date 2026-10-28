@@ -478,14 +478,15 @@ function tick(now) {
   }
   lastTick = now;
   if (state.phase === "attract") {
-    if (nextLm && camOn && pointingUp(nextLm)) {
+    const pointing = nextLm && camOn && (pointingUp(nextLm) || judgeFrames(recent, "D").score >= SUCCESS_SCORE);
+    if (pointing) {
       if (!sawHandAt) sawHandAt = now;
-      setMode("hot");
       if (now - sawHandAt >= ATTRACT_HOLD_MS) beginPlay();
     } else {
       sawHandAt = 0;
-      setMode("idle");
     }
+    // Light the frame for any hand, so people can see the camera has them before the finger lands.
+    setMode(pointing ? "ok" : nextLm ? "hot" : "idle");
     return;
   }
   if (state.phase !== "play" || now < lockUntil || state.feedback?.kind === "success") return;
