@@ -62,7 +62,8 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 }
 
 #wash { opacity: 0; }
-#mirror { opacity: 0; transform: scaleX(-1); }
+/* Not mirrored: the hand pictures are drawn as someone facing you sees a sign, so the camera shows you the same way. */
+#mirror { opacity: 0; }
 #cam {
   width: 100%;
   height: 100%;
@@ -198,8 +199,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 .sign {
   display: block;
-  /* The pictures are drawn as you'd see someone else; the camera is a mirror. Flip to match. */
-  transform: scaleX(-1);
   width: min(78%, 240px);
   height: auto;
 }
