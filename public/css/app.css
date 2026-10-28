@@ -118,11 +118,12 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     linear-gradient(to top, rgba(255, 190, 60, 0.5), rgba(255, 190, 60, 0) 30%);
 }
 
-/* Success: the whole card washes green. */
+/* Success: the camera stays visible; green rises from the bottom and the card's border glows. */
 #stage.win .frost {
-  background: linear-gradient(to bottom, rgba(124, 255, 20, 0.08) 0%, rgba(124, 255, 20, 0.35) 55%, rgba(110, 230, 20, 0.85) 100%);
+  background: linear-gradient(to bottom, rgba(124, 255, 20, 0) 50%, rgba(124, 255, 20, 0.5) 78%, rgba(124, 255, 20, 0.92) 100%);
   animation: wash 300ms ease-out;
 }
+#stage.win::after { border-color: #efffe0; box-shadow: 0 0 16px 2px var(--green), inset 0 0 16px 2px var(--green); transition: box-shadow 200ms; }
 @keyframes wash { from { opacity: 0; } to { opacity: 1; } }
 
 #hud, #frame, #panel, #pop, #fx { position: absolute; z-index: 3; }
@@ -282,8 +283,8 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 @keyframes march { to { stroke-dashoffset: -19; } }
 .sign.almost .pic { --edge: var(--orange); }
 .sign.almost .dash { stroke: var(--orange); }
-.sign.ok .pic { filter: invert(1) sepia(1) saturate(6) hue-rotate(55deg) brightness(1.08) drop-shadow(0 0 6px var(--green)); }
-.sign.ok .dash { stroke: var(--green); stroke-dasharray: none; stroke-width: 3.4; filter: drop-shadow(0 0 5px var(--green)); }
+.sign.ok .pic { filter: url(#edge); }
+.sign.ok .dash { display: none; }
 #stage.win .sign.ok { animation: scalein 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
 
 .br {
@@ -323,44 +324,50 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .swoosh :nth-child(3n) { animation-delay: 80ms; }
 .swoosh :nth-child(3n + 1) { animation-delay: 160ms; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
-.bit {
+/* The letter (or word) just signed, big and glowing under the hand. */
+.bigsign {
   position: absolute;
-  left: 50%;
-  top: 40%;
-  width: 10px;
-  height: 16px;
-  border-radius: 3px;
-  border: 2px solid var(--ink);
-  animation: burst 900ms cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
-}
-.bit:nth-child(odd) { width: 12px; height: 12px; border-radius: 50%; }
-@keyframes burst {
-  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 60px)) rotate(var(--r)) scale(1); opacity: 0; }
-}
-
-/* +points: pops by the hand, then flies into the score. */
-#pop {
-  top: 22%;
-  right: 16%;
+  left: 0;
+  right: 0;
+  top: 52%;
   margin: 0;
+  text-align: center;
+  font-family: "Lilita One", "Arial Black", sans-serif;
+  font-size: clamp(80px, 13vh, 120px);
+  line-height: 1;
+  color: var(--green);
+  -webkit-text-stroke: 3px #3fae00;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 0 10px var(--green)) drop-shadow(0 0 3px #fff);
+  animation: scalein 420ms 120ms cubic-bezier(0.2, 1.5, 0.4, 1) backwards;
+}
+.bigsign.word { font-size: clamp(54px, 9vh, 80px); letter-spacing: 0.06em; }
+
+/* +points: pops above the hand, then flies into the score's number. */
+#pop {
+  top: 17%;
+  left: 50%;
+  margin: 0;
+  white-space: nowrap;
   font-family: "Lilita One", "Arial Black", sans-serif;
   font-size: clamp(44px, 7vh, 62px);
-  color: var(--green);
+  color: #fff;
   -webkit-text-stroke: 8px var(--ink);
   paint-order: stroke fill;
-  transform: rotate(-12deg);
+  text-shadow: 0 4px 0 var(--ink), 0 0 18px var(--green);
+  transform: translateX(-50%) rotate(-8deg);
   z-index: 5;
   animation: popin 420ms cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
+/* The pop-in animation has to let go of transform, or the flight never moves. */
 #pop.fly {
-  transition: transform 380ms cubic-bezier(0.6, 0, 0.8, 0.4), opacity 380ms ease-in;
-  transform: translate(var(--fx), var(--fy)) rotate(0deg) scale(0.4);
-  opacity: 0.2;
+  animation: none;
+  transition: transform 380ms cubic-bezier(0.55, 0, 0.75, 0.35), opacity 380ms ease-in;
+  transform: translateX(-50%) translate(var(--fx), var(--fy)) rotate(0deg) scale(0.35);
+  opacity: 0.4;
 }
 #pop[hidden] { display: none; }
-@keyframes popin { from { transform: rotate(-12deg) scale(0); } to { transform: rotate(-12deg) scale(1); } }
+@keyframes popin { from { transform: translateX(-50%) rotate(-8deg) scale(0); } to { transform: translateX(-50%) rotate(-8deg) scale(1); } }
 
 #panel {
   left: 18px;

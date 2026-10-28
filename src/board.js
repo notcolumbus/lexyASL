@@ -11,7 +11,7 @@ export function parseEntry(body, today) {
   const name = String(body.name || "").trim().replace(/\s+/g, " ");
   const points = Number(body.points);
   if (!NAME.test(name)) return null;
-  if (!Number.isInteger(points) || points < 0 || points > 10000) return null;
+  if (!Number.isInteger(points) || points < 0 || points > 20000) return null;
   const day = typeof body.day === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(body.day) ? body.day : today;
   return { name, points, day };
 }

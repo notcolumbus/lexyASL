@@ -50,6 +50,8 @@ export function begin(line) {
     signed: 0,
     signing: false,
     points: 0,
+    letterPoints: 0,
+    wordPoints: 0,
     feedback: null,
     name: "",
     saved: false,
@@ -77,14 +79,23 @@ export function meter(state) {
   return Math.min(1, (state.cleared || 0) / total);
 }
 
-export function accept(state) {
+// Points for one sign. accuracy 0..1 from the matcher: a clean letter 100-250, a clean word 200-400.
+export function pointsFor(signing, accuracy) {
+  const a = Math.max(0, Math.min(1, Number.isFinite(accuracy) ? accuracy : 0.5));
+  const [lo, hi] = signing ? [200, 400] : [100, 250];
+  return Math.round((lo + (hi - lo) * a) / 10) * 10;
+}
+
+export function accept(state, accuracy = 0.5) {
   if (state.phase !== "play" || state.feedback?.kind === "success") return state;
-  const points = state.signing ? 400 : 200;
+  const points = pointsFor(state.signing, accuracy);
   return {
     ...state,
     cleared: state.signing ? state.cleared : state.cleared + 1,
     signed: state.signing ? state.signed + 1 : state.signed,
     points: state.points + points,
+    letterPoints: state.letterPoints + (state.signing ? 0 : points),
+    wordPoints: state.wordPoints + (state.signing ? points : 0),
     feedback: { kind: "success", points },
   };
 }
@@ -141,8 +152,8 @@ export function breakdown(state) {
   const letterMult = letters >= 3 ? 2 : 1;
   const wordMult = 3;
   const sentenceMult = 5;
-  const letterPoints = letters * 200 * letterMult;
-  const wordPoints = words * 200 * wordMult;
+  const letterPoints = (state.letterPoints || 0) * letterMult;
+  const wordPoints = (state.wordPoints || 0) * wordMult;
   const sentencePoints = sentence * 400 * sentenceMult;
   return {
     letters,

@@ -156,7 +156,16 @@ function setGhost(letter, mode) {
   const fresh = !ghostKey.startsWith(`${letter}:`);
   ghostKey = key;
   const name = /^[a-z]$/i.test(letter || "") ? letter.toLowerCase() : "a";
+  // On success the hand turns into a glowing green outline (edges of the picture only), as in the design.
   ghost.innerHTML = `<svg class="sign ${mode}${fresh ? " enter" : ""}" viewBox="-14 -14 128 128" aria-hidden="true">
+    <defs><filter id="edge" x="-20%" y="-20%" width="140%" height="140%">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="1.3" result="fat" />
+      <feComposite in="fat" in2="SourceAlpha" operator="out" result="ring" />
+      <feFlood flood-color="#7cff14" />
+      <feComposite in2="ring" operator="in" result="line" />
+      <feGaussianBlur in="line" stdDeviation="1.6" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="line" /><feMergeNode in="line" /></feMerge>
+    </filter></defs>
     <image class="pic" href="./assets/hands/${name}.png" x="0" y="0" width="100" height="100" />
     <path class="dash" d="${OUTLINES[name]}" />
   </svg>`;
@@ -260,7 +269,9 @@ function footer() {
     row.append(pub);
   } else row.append(el("span"));
   row.append(el("p", "skiphint", "Space to skip"));
-  const next = nextWord(state);
+  // Design: the next word shows only while you're on the current word's last letter.
+  const word = state.line.words[state.wordIndex] || "";
+  const next = !state.signing && state.letterIndex === word.length - 1 ? nextWord(state) : "";
   if (next) {
     const tag = el("p", "nextword");
     tag.append("Next: ", el("b", "", `'${next.toLowerCase()}'`));
@@ -277,7 +288,7 @@ function drawPlay() {
   const shown = kind === "success" ? state.points - state.feedback.points : state.points;
   hud.append(el("h1", "score", `Score: ${money(shown)}`));
   if (kind === "success") {
-    celebrate(state.feedback.points);
+    celebrate(state.feedback.points, word || letter);
     panel.append(successBanner());
     say(`Success! +${state.feedback.points}`);
     return;
@@ -317,37 +328,29 @@ const SWOOSH = `<svg class="swoosh" viewBox="0 0 400 520" aria-hidden="true">
 
 // Success beat: green swooshes draw in, confetti bursts from the hand, +points pops by the hand
 // then flies to the score, and the score ticks up when it lands.
-function celebrate(points) {
+function celebrate(points, sign) {
   fx.innerHTML = SWOOSH;
-  const colors = ["#7cff14", "#ffe14a", "#ffffff", "#41d300"];
-  for (let i = 0; i < 28; i++) {
-    const bit = el("i", "bit");
-    const angle = (i / 28) * Math.PI * 2 + Math.random() * 0.4;
-    const reach = 120 + Math.random() * 120;
-    bit.style.setProperty("--dx", `${Math.cos(angle) * reach}px`);
-    bit.style.setProperty("--dy", `${Math.sin(angle) * reach - 40}px`);
-    bit.style.setProperty("--r", `${Math.random() * 720 - 360}deg`);
-    bit.style.background = colors[i % colors.length];
-    fx.append(bit);
-  }
+  const big = el("p", sign.length > 1 ? "bigsign word" : "bigsign", sign);
+  fx.append(big);
   pop.textContent = `+${points}`;
   pop.hidden = false;
   pop.classList.remove("fly");
   void pop.offsetWidth;
   const score = hud.querySelector(".score");
   window.setTimeout(() => {
-    if (!score) return;
+    if (!score?.isConnected) return;
+    // Aim the middle of +points at the number end of "Score: N".
     const from = pop.getBoundingClientRect();
     const to = score.getBoundingClientRect();
-    pop.style.setProperty("--fx", `${to.right - from.right - 10}px`);
-    pop.style.setProperty("--fy", `${to.top - from.top}px`);
+    pop.style.setProperty("--fx", `${to.right - 50 - (from.left + from.width / 2)}px`);
+    pop.style.setProperty("--fy", `${to.top + to.height / 2 - (from.top + from.height / 2)}px`);
     pop.classList.add("fly");
-  }, 480);
+  }, 520);
   window.setTimeout(() => {
     if (!score?.isConnected) return;
     score.textContent = `Score: ${money(state.points)}`;
     score.classList.add("bump");
-  }, 860);
+  }, 900);
   window.setTimeout(() => {
     fx.innerHTML = "";
   }, FLASH_MS);
@@ -434,6 +437,8 @@ let recent = [];
 
 function onLandmarks(points, raw) {
   const t = performance.now();
+  // Someone in front of the camera counts as activity, so the summary doesn't time out on them.
+  if (points) lastInput = t;
   if (raw) trail = trail.filter((f) => t - f.t <= WORD_WINDOW_MS + 500).concat({ t, raw });
   prevLm = nextLm;
   nextLm = points;
@@ -508,7 +513,12 @@ function finishFlash() {
   recent = [];
   trail = [];
   wordSince = 0;
-  if (state.phase === "summary") draftName = "";
+  if (state.phase === "summary") {
+    draftName = "";
+    // The idle clock starts when the summary does: a hands-only round never touched the keyboard,
+    // so without this the summary looked 45 s idle the moment it appeared and jumped to the start screen.
+    lastInput = performance.now();
+  }
 }
 
 function backToStart() {
@@ -561,7 +571,7 @@ stage.addEventListener("input", (event) => {
 stage.addEventListener("pointerdown", (event) => {
   if (!event.target.closest("[data-act=hold]") || state.phase !== "play") return;
   if (state.feedback?.kind === "success") return;
-  dispatch(accept(state));
+  dispatch(accept(state, 0.3 + Math.random() * 0.5));
   window.clearTimeout(flashTimer);
   flashTimer = window.setTimeout(finishFlash, FLASH_MS);
 });
@@ -581,7 +591,7 @@ window.addEventListener("keydown", (event) => {
   }
   const typed = event.key.toUpperCase() === targetLetter(state) || (event.key === "Enter" && targetWord(state));
   if (state.phase === "play" && typed) {
-    dispatch(accept(state));
+    dispatch(accept(state, 0.3 + Math.random() * 0.5));
     window.clearTimeout(flashTimer);
     flashTimer = window.setTimeout(finishFlash, FLASH_MS);
     return;
@@ -610,8 +620,9 @@ function wordInput(now, mirror) {
 }
 
 // ponytail: the model runs on the main thread, ~15 ms per read; move it into the hand worker if the camera stutters.
-function passWord() {
-  dispatch(accept(state));
+// accuracy 0..1 decides the points (see pointsFor).
+function passWord(accuracy) {
+  dispatch(accept(state, accuracy));
   window.clearTimeout(flashTimer);
   flashTimer = window.setTimeout(finishFlash, FLASH_MS);
 }
@@ -635,7 +646,7 @@ function wordTick(now) {
   const moving = wristTravel(now) >= WORD_FALLBACK_TRAVEL;
   if (moving && now - wordSince >= WORD_FALLBACK_MS) {
     if (debugOn) console.debug("word: passed on movement fallback");
-    passWord();
+    passWord(0.15 + Math.random() * 0.35);
     return;
   }
   if (!wordModel) {
@@ -660,7 +671,8 @@ function wordTick(now) {
     }
   }
   setMode(inTop ? "ok" : best >= 0.02 || moving ? "almost" : "hot");
-  if (inTop) passWord();
+  // 5% -> fewest points, 60%+ -> most.
+  if (inTop) passWord((best - WORD_MIN_P) / (0.6 - WORD_MIN_P));
 }
 
 function tick(now) {
@@ -696,7 +708,8 @@ function tick(now) {
     setMode("ok");
     if (now - holdStart >= HOLD_MS) {
       holdStart = 0;
-      dispatch(accept(state));
+      // The vote's own confidence, from the pass bar (fewest points) to certain (most).
+      dispatch(accept(state, (result.score - SUCCESS_SCORE) / (1 - SUCCESS_SCORE)));
       window.clearTimeout(flashTimer);
       flashTimer = window.setTimeout(finishFlash, FLASH_MS);
     }

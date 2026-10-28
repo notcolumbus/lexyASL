@@ -16,6 +16,7 @@ import {
   setName,
   finishEarly,
   skip,
+  pointsFor,
   WORD_SIGNS,
 } from "../public/js/session.js";
 
@@ -31,10 +32,12 @@ test("each word is spelled, then signed, and the line scores every step", () => 
     assert.equal(seen.join(""), line.words.map((w) => w + `[${w}]`).join(""));
     assert.equal(state.phase, "summary");
     const letters = line.words.join("").length;
-    assert.equal(state.points, letters * 200 + line.words.length * 400);
+    assert.equal(state.points, letters * 180 + line.words.length * 300);
     const score = breakdown(state);
-    assert.equal(score.total, letters * 400 + line.words.length * 600 + 2000);
-    assert.ok(score.total <= 10000, String(score.total));
+    assert.equal(score.total, letters * 180 * 2 + line.words.length * 300 * 3 + 2000);
+    let perfect = begin(line);
+    while (perfect.phase === "play") perfect = advance(accept(perfect, 1));
+    assert.ok(breakdown(perfect).total <= 20000, "a perfect round fits under the server cap");
     assert.equal(meter(state), 1);
   }
 });
@@ -46,10 +49,14 @@ test("every word has a sign and lines are three or four words", () => {
   }
 });
 
-test("the pop is 200 and a second accept during the flash does nothing", () => {
+test("points follow accuracy, and a second accept during the flash does nothing", () => {
+  assert.equal(pointsFor(false, 0), 100);
+  assert.equal(pointsFor(false, 1), 250);
+  assert.equal(pointsFor(true, 0), 200);
+  assert.equal(pointsFor(true, 1), 400);
   let state = begin(LINES[0]);
-  state = accept(state);
-  assert.equal(state.feedback.points, 200);
+  state = accept(state, 0.8);
+  assert.equal(state.feedback.points, 220);
   assert.equal(accept(state), state);
 });
 
@@ -98,7 +105,7 @@ test("publishing mid-round scores only what was signed", () => {
   assert.equal(score.letters, 2);
   assert.equal(score.words, 0);
   assert.equal(score.sentence, 0);
-  assert.equal(score.total, 2 * 200);
+  assert.equal(score.total, 2 * 180);
   assert.equal(finishEarly(begin(LINES[0])).phase, "play");
 });
 

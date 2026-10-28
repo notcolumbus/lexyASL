@@ -21,7 +21,7 @@ test("scores sort high to low and each player shows once, at their best", () => 
 test("names and scores are checked before they are stored", () => {
   assert.equal(parseEntry({ name: "a", points: 3200 }, "2026-10-27"), null);
   assert.equal(parseEntry({ name: "Ada<script>", points: 100 }, "2026-10-27"), null);
-  assert.equal(parseEntry({ name: "Ada", points: 10001 }, "2026-10-27"), null);
+  assert.equal(parseEntry({ name: "Ada", points: 20001 }, "2026-10-27"), null);
   assert.deepEqual(parseEntry({ name: "  Elaina   G. ", points: 3200, day: "2026-10-27" }, "2026-10-28"), {
     name: "Elaina G.",
     points: 3200,
