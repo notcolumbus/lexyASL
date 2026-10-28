@@ -1,41 +1,6 @@
-const LINKS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [17, 18], [18, 19], [19, 20],
-  [0, 9], [0, 13], [0, 17],
-];
-
-const mixBuf = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
 let blurTmp = null;
 
-export function mixLandmarks(prev, next, t) {
-  if (!next) return prev;
-  if (!prev) return next;
-  for (let i = 0; i < 21; i++) {
-    const a = prev[i];
-    const b = next[i];
-    mixBuf[i].x = a.x + (b.x - a.x) * t;
-    mixBuf[i].y = a.y + (b.y - a.y) * t;
-    mixBuf[i].z = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * t;
-  }
-  return mixBuf;
-}
-
-export function fitCanvas(canvas) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  const pw = Math.max(1, Math.round(w * dpr));
-  const ph = Math.max(1, Math.round(h * dpr));
-  if (canvas.width !== pw || canvas.height !== ph) {
-    canvas.width = pw;
-    canvas.height = ph;
-  }
-  return dpr;
-}
-
+// Scale (vw x vh) to cover (cw x ch), centered, like object-fit: cover.
 function cover(vw, vh, cw, ch) {
   const scale = Math.max(cw / vw, ch / vh);
   const dw = vw * scale;
@@ -43,41 +8,11 @@ function cover(vw, vh, cw, ch) {
   return { x: (cw - dw) / 2, y: (ch - dh) / 2, w: dw, h: dh };
 }
 
-export function paintBones(canvas, video, landmarks, color) {
-  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-  const dpr = fitCanvas(canvas);
-  const cw = canvas.clientWidth;
-  const ch = canvas.clientHeight;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cw, ch);
-  if (!landmarks || !video.videoWidth) return;
-  const box = cover(video.videoWidth, video.videoHeight, cw, ch);
-  const at = (p) => ({ x: box.x + p.x * box.w, y: box.y + p.y * box.h });
-  ctx.lineWidth = 5;
-  ctx.lineCap = "round";
-  ctx.strokeStyle = color;
-  ctx.beginPath();
-  for (const [a, b] of LINKS) {
-    const p = at(landmarks[a]);
-    const q = at(landmarks[b]);
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(q.x, q.y);
-  }
-  ctx.stroke();
-  ctx.fillStyle = color;
-  for (let i = 0; i < landmarks.length; i++) {
-    const p = at(landmarks[i]);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, i % 4 === 0 ? 4 : 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
 export function paintBlur(video, canvas) {
   if (!video.videoWidth) return;
   const w = canvas.width;
   const h = canvas.height;
-  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true, willReadFrequently: true });
   const box = cover(video.videoWidth, video.videoHeight, w, h);
   ctx.drawImage(video, box.x, box.y, box.w, box.h);
   const img = ctx.getImageData(0, 0, w, h);
@@ -130,10 +65,4 @@ export function paintBlur(video, canvas) {
     }
   }
   ctx.putImageData(img, 0, 0);
-}
-
-export function handIcon(letter, mode) {
-  const name = /^[a-z]$/i.test(letter || "") ? letter.toLowerCase() : "a";
-  const tone = mode === "ok" ? "ok" : mode === "almost" ? "almost" : "guide";
-  return `<img class="sign ${tone}" src="./assets/hands/${name}.png" alt="" />`;
 }

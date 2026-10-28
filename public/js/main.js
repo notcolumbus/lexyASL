@@ -1,6 +1,6 @@
 import { paintBlur } from "./draw.js";
 import { OUTLINES } from "./outlines.js";
-import { pushFrame, startHand } from "./hand.js";
+import { handReady, pushFrame, startHand } from "./hand.js";
 import { ALMOST_SCORE, HOW, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
 import { WORD_LABELS, unpack, wordProbs } from "./words.js";
 import {
@@ -64,7 +64,6 @@ const params = new URLSearchParams(location.search);
 let benchOn = params.get("bench") === "1";
 const debugOn = params.get("debug") === "1";
 const store = browserStore();
-const today = todayKey(new Date());
 const fixedLine = lineById(params.get("line"));
 
 let data = load(store);
@@ -72,19 +71,16 @@ let state = attract();
 let camOn = false;
 let camFailed = false;
 let armed = false;
-let stream = null;
-let prevLm = null;
 let nextLm = null;
-let lmAt = 0;
 let holdStart = 0;
 let lockUntil = 0;
 let flashTimer = 0;
 let sawHandAt = 0;
 let lastPaint = "";
+let celebrated = null;
 let rendered = false;
 let ghostKey = "";
 let status = "Tap Match up!";
-let note = "";
 let draftName = "";
 let nameError = "";
 let lastLineId = "";
@@ -99,7 +95,6 @@ fetch("./models/popsign-250.bin")
     wordModel = unpack(buf);
   })
   .catch((error) => console.error("Word model didn't load:", error));
-let lastTick = 0;
 let lastInput = performance.now();
 
 const frameTimes = [];
@@ -219,7 +214,6 @@ function trouble() {
 function drawAttract() {
   setGhost("D", "guide");
   hud.append(el("h1", "logo", "SPELLBOUND"), board("home"));
-  if (note) hud.append(el("p", "note", note));
   panel.append(ribbon("Match up!", armed ? "start" : "match"));
   const warn = trouble();
   if (warn) panel.append(warn);
@@ -294,7 +288,10 @@ function drawPlay() {
   const shown = kind === "success" ? state.points - state.feedback.points : state.points;
   hud.append(el("h1", "score", `Score: ${money(shown)}`));
   if (kind === "success") {
-    celebrate(state.feedback.points, word || letter);
+    if (celebrated !== state.feedback) {
+      celebrated = state.feedback;
+      celebrate(state.feedback.points, word || letter);
+    }
     panel.append(successBanner());
     say(`Success! +${state.feedback.points}`);
     return;
@@ -302,13 +299,13 @@ function drawPlay() {
   if (word) {
     hud.append(el("p", "wordcall", "Now sign out the word!"));
     panel.append(coach(WORD_SIGNS[word].how), el("p", "wordbig", word), meterRow(), footer());
-    if (camFailed) panel.append(holdButton());
+    if (camFailed || !handReady()) panel.append(holdButton());
     say(`Now sign the word ${word}. ${WORD_SIGNS[word].how}`);
     return;
   }
   // The how-to stays up the whole time: the blanks hide the letter, this says how to make it.
   panel.append(coach(HOW[letter]), platforms(), meterRow(), footer());
-  if (camFailed) panel.append(holdButton());
+  if (camFailed || !handReady()) panel.append(holdButton());
   const warn = trouble();
   if (warn) panel.append(warn);
   say(kind === "almost" ? state.feedback.text : `Sign ${letter}`);
@@ -357,8 +354,9 @@ function celebrate(points, sign) {
     score.textContent = `Score: ${money(state.points)}`;
     score.classList.add("bump");
   }, 900);
+  const mine = fx.firstChild;
   window.setTimeout(() => {
-    fx.innerHTML = "";
+    if (fx.firstChild === mine) fx.innerHTML = "";
   }, FLASH_MS);
 }
 
@@ -373,45 +371,29 @@ function money(n) {
   return n.toLocaleString("en-US");
 }
 
-function sumLine(count, label, mult, i) {
-  const row = el("p", "sumline");
-  row.style.setProperty("--i", i);
-  row.append(document.createTextNode(`${count} ${label}`), el("i", "mx", `${mult}x`));
-  return row;
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function plus(i) {
-  const node = el("p", "sumplus", "+");
-  node.style.setProperty("--i", i);
-  return node;
-}
-
+// Summary, as in the design: ribbon, a points badge, the quote with who said it, then publish.
 function drawSummary() {
   const score = breakdown(state);
   setGhost("A", "guide");
   const title = el("h1", "sumribbon");
   title.append(el("span", "", "SpellBound Summary"));
+  const badge = el("div", "sumbadge");
+  badge.append(el("p", "pts", `${money(score.total)} points`));
+  const parts = el("p", "parts");
+  parts.append(plural(score.letters, "letter"), el("b", "", "+"), plural(score.words, "word"), el("b", "", "+"), plural(score.sentence, "sentence"));
+  badge.append(parts);
   const quote = el("p", "sumquote", `“${state.line.text}”`);
-  const stack = el("div", "sumstack");
-  stack.append(
-    sumLine(score.letters, score.letters === 1 ? "letter" : "letters", score.letterMult, 0),
-    plus(1),
-    sumLine(score.words, score.words === 1 ? "word" : "words", score.wordMult, 2),
-    plus(3),
-    sumLine(score.sentence, "sentence", score.sentenceMult, 4),
-  );
-  const total = el("p", "sumtotal");
-  total.style.setProperty("--i", 5);
-  total.append(el("b", "", money(score.total)), " points");
-  stack.append(total);
-  panel.append(title, quote, stack);
+  const by = el("p", "sumby", `- ${state.line.by}`);
+  panel.append(title, badge, quote, by);
   if (!state.saved) {
-    panel.append(el("p", "sumhint", "Add name and save progress"));
     const form = el("form", "nameform");
-    form.dataset.act = "saveform";
     const input = el("input", "name");
     input.name = "name";
-    input.placeholder = "Name";
+    input.placeholder = "Your name";
     input.autocomplete = "off";
     input.maxLength = 14;
     input.value = draftName;
@@ -423,16 +405,9 @@ function drawSummary() {
     if (nameError) panel.append(el("p", "hint", nameError));
     window.setTimeout(() => input.focus({ preventScroll: true }), 50);
   } else {
-    const streak = el("p", "streak");
-    streak.append(
-      state.streak > 1 ? `Day ${state.streak}! Log everyday & create a streak multiplier!` : "Log everyday & create a streak multiplier!",
-      el("i", "mx", `${Math.min(5, state.streak)}x`),
-    );
-    panel.append(streak);
+    panel.append(board("list"), ribbon("Match up!", "again"));
   }
-  panel.append(board("list"));
-  if (state.saved) panel.append(ribbon("Match up!", "again"));
-  say(`Summary. ${money(score.total)} points.`);
+  say(`Summary. ${money(score.total)} points. ${state.line.text} ${state.line.by}.`);
 }
 
 function setMode(mode) {
@@ -443,12 +418,8 @@ let recent = [];
 
 function onLandmarks(points, raw) {
   const t = performance.now();
-  // Someone in front of the camera counts as activity, so the summary doesn't time out on them.
-  if (points) lastInput = t;
   if (raw) trail = trail.filter((f) => t - f.t <= WORD_WINDOW_MS + 500).concat({ t, raw });
-  prevLm = nextLm;
   nextLm = points;
-  lmAt = performance.now();
   // A lost hand clears the vote so an old pose can't carry over.
   recent = points ? recent.concat([points]).slice(-VOTE_FRAMES) : [];
 }
@@ -462,7 +433,7 @@ function onStatus(text) {
 async function enableCamera() {
   if (camOn) return true;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         facingMode: "user",
@@ -474,6 +445,7 @@ async function enableCamera() {
     video.srcObject = stream;
     await video.play();
     camOn = true;
+    camFailed = false;
     stage.classList.add("live");
     return true;
   } catch {
@@ -487,8 +459,9 @@ function beginPlay() {
   if (state.phase === "play") return;
   holdStart = 0;
   sawHandAt = 0;
-  prevLm = null;
   nextLm = null;
+  draftName = "";
+  nameError = "";
   const line = fixedLine || randomLine(lastLineId);
   lastLineId = line.id;
   wordShown = -1;
@@ -498,7 +471,6 @@ function beginPlay() {
 }
 
 async function onMatch() {
-  note = "";
   const ok = await enableCamera();
   startHand(onStatus, onLandmarks);
   if (!ok) {
@@ -528,26 +500,35 @@ function finishFlash() {
 }
 
 function backToStart() {
-  note = "";
   status = camOn ? "Hold up your pointer finger to start." : "Tap Match up!";
   dispatch(attract());
 }
 
+let saving = false;
+
 async function saveScore() {
+  if (saving || state.phase !== "summary" || state.saved) return;
   if (!validName(draftName)) {
     nameError = "Type a name: 2 to 14 letters, like Elaina G.";
     lastPaint = "";
     render();
     return;
   }
+  saving = true;
+  const at = state;
   const next = markSaved(setName(state, draftName));
+  const today = todayKey(new Date());
   const saved = record(store, data, next.name, breakdown(next).total, today);
   data = saved.data;
-  const remote = await pushScore(next.name, breakdown(next).total, today);
-  if (remote) data = { ...data, scores: remote };
-  note = "";
   nameError = "";
+  // Show it saved right away; the shared board fills in when the server answers.
   dispatch({ ...next, streak: saved.streak });
+  document.querySelector("[data-act=again]")?.focus();
+  const remote = await pushScore(next.name, breakdown(next).total, today);
+  saving = false;
+  if (remote) data = { ...data, scores: remote };
+  // A slow save must not repaint over a round someone else already started.
+  if (state.phase === "summary" && state.line === at.line) render();
 }
 
 stage.addEventListener("click", (event) => {
@@ -574,7 +555,7 @@ stage.addEventListener("input", (event) => {
   draftName = clean;
 });
 
-stage.addEventListener("pointerdown", (event) => {
+stage.addEventListener("click", (event) => {
   if (!event.target.closest("[data-act=hold]") || state.phase !== "play") return;
   if (state.feedback?.kind === "success") return;
   dispatch(accept(state, 0.3 + Math.random() * 0.5));
@@ -596,7 +577,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   const typed = event.key.toUpperCase() === targetLetter(state) || (event.key === "Enter" && targetWord(state));
-  if (state.phase === "play" && typed) {
+  if (state.phase === "play" && typed && state.feedback?.kind !== "success") {
     dispatch(accept(state, 0.3 + Math.random() * 0.5));
     window.clearTimeout(flashTimer);
     flashTimer = window.setTimeout(finishFlash, FLASH_MS);
@@ -685,10 +666,8 @@ function tick(now) {
   if (state.phase === "summary" && now - lastInput > IDLE_MS) backToStart();
   if (state.phase === "play" && targetWord(state) && now >= lockUntil && state.feedback?.kind !== "success") {
     wordTick(now);
-    lastTick = now;
     return;
   }
-  lastTick = now;
   if (state.phase === "attract") {
     const pointing = nextLm && camOn && (pointingUp(nextLm) || judgeFrames(recent, "D").score >= SUCCESS_SCORE);
     if (pointing) {

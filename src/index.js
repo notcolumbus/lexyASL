@@ -1,4 +1,4 @@
-import { addScore, emptyBoard, parseEntry, publicBoard } from "./board.js";
+import { MAX_POINTS, addScore, emptyBoard, parseEntry, publicBoard } from "./board.js";
 
 const KEY = "board.json";
 
@@ -42,6 +42,8 @@ export default {
       return json(publicBoard(await readBoard(env.BOARD)));
     }
     if (request.method === "POST") {
+      // A score is a few dozen bytes; refuse anything big before parsing it.
+      if (Number(request.headers.get("content-length") || 0) > 1024) return json({ error: "Too large." }, 413);
       let body;
       try {
         body = await request.json();
@@ -49,9 +51,13 @@ export default {
         return json({ error: "Expected a JSON body." }, 400);
       }
       const entry = parseEntry(body, todayUtc(new Date()));
-      if (!entry) return json({ error: "Use a 2 to 14 character name (letters, spaces, . ' -) and a score up to 20000." }, 400);
-      const board = await writeScore(env.BOARD, entry);
-      return json(publicBoard(board));
+      if (!entry) return json({ error: `Use a 2 to 14 character name (letters, spaces, . ' -) and a score up to ${MAX_POINTS}.` }, 400);
+      try {
+        return json(publicBoard(await writeScore(env.BOARD, entry)));
+      } catch {
+        // KV allows about one write per second per key; a burst can fail. The client keeps its local copy.
+        return json({ error: "Busy, try again." }, 503);
+      }
     }
     return json({ error: "Method not allowed." }, 405);
   },

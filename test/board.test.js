@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addScore, emptyBoard, parseEntry, publicBoard } from "../src/board.js";
+import { MAX_POINTS, addScore, emptyBoard, parseEntry, publicBoard } from "../src/board.js";
 
 test("a new board is empty: no made-up names", () => {
   assert.deepEqual(publicBoard(emptyBoard()).scores, []);
@@ -18,10 +18,17 @@ test("scores sort high to low and each player shows once, at their best", () => 
   ]);
 });
 
+test("one name posted many times keeps one stored row, so it can't push others off", () => {
+  let board = addScore(emptyBoard(), { name: "Bobby H.", points: 900, day: "2026-10-28" });
+  for (let i = 0; i < 60; i++) board = addScore(board, { name: "Spam", points: 1000 + i, day: "2026-10-28" });
+  assert.equal(board.scores.length, 2);
+  assert.deepEqual(publicBoard(board).scores.map((row) => `${row.name} ${row.points}`), ["Spam 1059", "Bobby H. 900"]);
+});
+
 test("names and scores are checked before they are stored", () => {
   assert.equal(parseEntry({ name: "a", points: 3200 }, "2026-10-27"), null);
   assert.equal(parseEntry({ name: "Ada<script>", points: 100 }, "2026-10-27"), null);
-  assert.equal(parseEntry({ name: "Ada", points: 20001 }, "2026-10-27"), null);
+  assert.equal(parseEntry({ name: "Ada", points: MAX_POINTS + 1 }, "2026-10-27"), null);
   assert.deepEqual(parseEntry({ name: "  Elaina   G. ", points: 3200, day: "2026-10-27" }, "2026-10-28"), {
     name: "Elaina G.",
     points: 3200,

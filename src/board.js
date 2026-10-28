@@ -6,12 +6,15 @@ export function emptyBoard() {
 // Same rule as the browser (session.js validName): "Elaina G." style, 2 to 14 characters.
 const NAME = /^[A-Za-z][A-Za-z .'-]{1,13}$/;
 
+// Above any round's best: 12 letters at 350 x2, 2 words at 600 x3, the 400 x5 sentence bonus.
+export const MAX_POINTS = 15000;
+
 export function parseEntry(body, today) {
   if (!body || typeof body !== "object") return null;
   const name = String(body.name || "").trim().replace(/\s+/g, " ");
   const points = Number(body.points);
   if (!NAME.test(name)) return null;
-  if (!Number.isInteger(points) || points < 0 || points > 20000) return null;
+  if (!Number.isInteger(points) || points < 0 || points > MAX_POINTS) return null;
   const day = typeof body.day === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(body.day) ? body.day : today;
   return { name, points, day };
 }
@@ -21,10 +24,13 @@ function byRank(a, b) {
 }
 
 export function addScore(board, entry) {
+  // Keep each player's best only, so one name can't fill every stored row and push others off.
+  const seen = new Set();
   const scores = (Array.isArray(board?.scores) ? board.scores : emptyBoard().scores)
     .concat(entry)
     .filter((row) => row && NAME.test(row.name) && Number.isInteger(row.points))
     .sort(byRank)
+    .filter((row) => !seen.has(row.name.toLowerCase()) && seen.add(row.name.toLowerCase()))
     .slice(0, 40);
   return { scores };
 }

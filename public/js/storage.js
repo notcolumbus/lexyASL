@@ -7,7 +7,9 @@ export function load(store) {
   if (!raw || !Array.isArray(raw.scores) || typeof raw.streaks !== "object" || raw.streaks === null) {
     return emptyData();
   }
-  return { scores: raw.scores.slice(), streaks: { ...raw.streaks } };
+  // Drop anything malformed so one bad row can't break every render.
+  const scores = raw.scores.filter((row) => row && typeof row.name === "string" && Number.isFinite(row.points));
+  return { scores, streaks: { ...raw.streaks } };
 }
 
 // Each player once, at their best: same as the server's board.
@@ -86,7 +88,12 @@ export function browserStore() {
       }
     },
     set(value) {
-      localStorage.setItem(key, JSON.stringify(value));
+      // Full or disabled storage must not stop the score from reaching the shared board.
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch {
+        /* keep going without the local copy */
+      }
     },
   };
 }

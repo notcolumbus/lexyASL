@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MAX_POINTS } from "../src/board.js";
 import {
   LINES,
   accept,
@@ -29,24 +30,31 @@ test("each word is spelled, then signed, and the line scores every step", () => 
       seen.push(word ? `[${word}]` : targetLetter(state));
       state = advance(accept(state));
     }
-    assert.equal(seen.join(""), line.words.map((w) => w + `[${w}]`).join(""));
+    assert.equal(seen.join(""), line.words.map((w) => w + (WORD_SIGNS[w] ? `[${w}]` : "")).join(""));
     assert.equal(state.phase, "summary");
     const letters = line.words.join("").length;
-    assert.equal(state.points, letters * 280 + line.words.length * 500);
+    const signed = line.words.filter((w) => WORD_SIGNS[w]).length;
+    assert.equal(state.points, letters * 280 + signed * 500);
     const score = breakdown(state);
-    assert.equal(score.total, letters * 280 * 2 + line.words.length * 500 * 3 + 2000);
+    assert.equal(score.total, letters * 280 * (letters >= 3 ? 2 : 1) + signed * 500 * 3 + 2000);
     let perfect = begin(line);
     while (perfect.phase === "play") perfect = advance(accept(perfect, 1));
-    assert.ok(breakdown(perfect).total <= 20000, "a perfect round fits under the server cap");
+    assert.ok(breakdown(perfect).total <= MAX_POINTS, "a perfect round fits under the server cap");
     assert.equal(meter(state), 1);
   }
 });
 
-test("every word has a sign and lines are three or four words", () => {
+test("quotes are tiny, credited, and only real word signs get a sign step", () => {
   for (const line of LINES) {
-    assert.ok(line.words.length >= 3 && line.words.length <= 4, line.text);
-    for (const word of line.words) assert.ok(WORD_SIGNS[word], word);
+    assert.ok(line.words.length >= 1 && line.words.length <= 3, line.text);
+    assert.ok(line.by && line.by.includes(","), `${line.text} needs "Who, Where"`);
+    assert.equal(line.text.toUpperCase().replace(/[^A-Z ]/g, ""), line.words.join(" "), line.text);
   }
+  const skips = begin(LINES.find((line) => line.id === "letitbe"));
+  let state = skips;
+  for (let i = 0; i < 3; i++) state = advance(accept(state));
+  assert.equal(state.signing, false, "LET has no sign step");
+  assert.equal(state.wordIndex, 1);
 });
 
 test("points follow accuracy, and a second accept during the flash does nothing", () => {

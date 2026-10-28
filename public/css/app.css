@@ -231,18 +231,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .score.bump { animation: bump 380ms cubic-bezier(0.2, 1.6, 0.4, 1); }
 @keyframes bump { 40% { transform: scale(1.18); } }
 
-.note {
-  margin: 12px 0 0;
-  display: inline-block;
-  background: #fff;
-  border: 3px solid var(--ink);
-  border-radius: 14px;
-  box-shadow: 3px 3px 0 var(--ink);
-  padding: 6px 10px;
-  font-weight: 800;
-  font-size: 14px;
-}
-
 #frame {
   left: 50%;
   width: min(86%, 390px);
@@ -642,76 +630,60 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .sumribbon::before { top: 16%; }
 .sumribbon::after { bottom: 14%; }
 
-.sumquote {
-  margin: 8px 0 6px;
+/* Points badge: striped gold pill, total on top, what made it underneath. */
+.sumbadge {
+  justify-self: center;
+  width: min(100%, 330px);
+  margin: 18px 0 6px;
+  padding: 10px 16px 12px;
   text-align: center;
-  font-weight: 900;
-  font-size: 20px;
-  color: #fff;
-  -webkit-text-stroke: 3px var(--ink);
-  paint-order: stroke fill;
-  animation: rise 400ms 200ms backwards;
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(-55deg, rgba(255, 255, 255, 0.25) 0 14px, transparent 14px 30px),
+    linear-gradient(to bottom, #ffe34a, #ffb000);
+  box-shadow: 0 6px 0 var(--ink);
+  animation: rise 450ms 300ms cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
 }
-
-.sumstack { display: grid; justify-items: center; gap: 0; }
-.sumline, .sumplus, .sumtotal { animation: rise 450ms cubic-bezier(0.2, 1.4, 0.4, 1) backwards; animation-delay: calc(300ms + var(--i, 0) * 110ms); }
-
-.sumline {
-  position: relative;
+.sumbadge .pts {
   margin: 0;
   font-family: "Lilita One", "Arial Black", sans-serif;
-  font-size: clamp(38px, 6.6vh, 54px);
-  line-height: 1;
+  font-size: clamp(34px, 6vh, 46px);
+  line-height: 1.05;
+  color: #fff;
+  -webkit-text-stroke: 5px var(--ink);
+  paint-order: stroke fill;
+}
+.sumbadge .parts { margin: 4px 0 0; display: flex; justify-content: center; gap: 10px; font-weight: 800; font-size: 16px; }
+.sumbadge .parts b { font-weight: 900; }
+
+/* The quote, big, and who said it on a tilted tag hanging off the left edge. */
+.sumquote {
+  margin: 22px 0 6px;
+  text-align: center;
+  font-family: Nunito, sans-serif;
+  font-weight: 900;
+  font-size: clamp(34px, 6vh, 46px);
+  line-height: 1.1;
   color: #fff;
   -webkit-text-stroke: 6px var(--ink);
   paint-order: stroke fill;
+  animation: rise 450ms 450ms cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
 }
-
-.mx {
-  position: relative;
-  top: -0.9em;
-  margin-left: 2px;
-  display: inline-block;
-  font-family: "Lilita One", "Arial Black", sans-serif;
-  font-style: normal;
-  font-size: 22px;
-  color: var(--orange);
-  -webkit-text-stroke: 4px #fff;
-  paint-order: stroke fill;
-  transform: rotate(-18deg);
-}
-
-.sumplus {
-  margin: 2px 0;
-  font-family: "Lilita One", "Arial Black", sans-serif;
-  font-size: 34px;
-  line-height: 1;
-  color: #fff;
-  -webkit-text-stroke: 5px var(--ink);
-  paint-order: stroke fill;
-}
-
-.sumtotal {
-  margin: 6px 0 0;
-  font-family: "Lilita One", "Arial Black", sans-serif;
-  font-size: clamp(30px, 5vh, 40px);
-  color: var(--green);
-  -webkit-text-stroke: 5px var(--ink);
-  paint-order: stroke fill;
-}
-.sumtotal b { font-weight: 400; font-size: 1.5em; }
-
-.sumhint, .streak {
-  margin: 10px 0 2px;
-  text-align: center;
+.sumby {
+  justify-self: start;
+  margin: 6px 0 18px -18px;
+  padding: 6px 16px 6px 40px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 5px 0 var(--ink);
   font-weight: 800;
-  font-size: 19px;
-  color: #fff;
-  -webkit-text-stroke: 3px var(--ink);
-  paint-order: stroke fill;
-  animation: rise 400ms 800ms backwards;
+  font-size: 16px;
+  transform: rotate(-3deg);
+  animation: slidein 420ms 650ms cubic-bezier(0.2, 1.2, 0.4, 1) backwards;
 }
-.streak .mx { top: 0.2em; font-size: 26px; }
 
 .nameform { display: grid; gap: 10px; animation: rise 400ms 850ms backwards; }
 .name {
@@ -754,12 +726,9 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 #stage:not(.fresh) .logo,
 #stage:not(.fresh) .board li,
 #stage:not(.fresh) .sumribbon,
+#stage:not(.fresh) .sumbadge,
 #stage:not(.fresh) .sumquote,
-#stage:not(.fresh) .sumline,
-#stage:not(.fresh) .sumplus,
-#stage:not(.fresh) .sumtotal,
-#stage:not(.fresh) .sumhint,
-#stage:not(.fresh) .streak,
+#stage:not(.fresh) .sumby,
 #stage:not(.fresh) .nameform { animation: none; }
 #stage:not(.fresh) .match { animation: sway 2.6s ease-in-out infinite, stripes 2.2s linear infinite; }
 

@@ -1,29 +1,21 @@
-// Six short lines that are hard to fail. Every letter is one the letter model gets 94%+ right on
-// signers it never saw (no A, C, D, U, V), and every word is one PopSign's word model knows.
-// label: the word's name in that model. hand: the picture shown while signing it.
+// Six tiny, real quotes. Every letter is one the letter model gets 94%+ right on signers it never
+// saw (no A, C, D, U, V). Words PopSign's model knows also get a sign-the-word step; the rest are
+// just spelled. by: who said it, and where, shown under the quote at the end.
 export const LINES = [
-  { id: "hello", text: "Hello, Mom, bye!", words: ["HELLO", "MOM", "BYE"] },
-  { id: "sleep", text: "Sleep now, Mom", words: ["SLEEP", "NOW", "MOM"] },
-  { id: "snow", text: "Mom, look, snow!", words: ["MOM", "LOOK", "SNOW"] },
-  { id: "fine", text: "Yes! Fine! Bye!", words: ["YES", "FINE", "BYE"] },
-  { id: "milk", text: "Hot milk now", words: ["HOT", "MILK", "NOW"] },
-  { id: "pig", text: "Hello, wet pig!", words: ["HELLO", "WET", "PIG"] },
+  { id: "whynot", text: "Why not?", by: "George Bernard Shaw, Back to Methuselah", words: ["WHY", "NOT"] },
+  { id: "think", text: "Think.", by: "Thomas J. Watson, IBM's motto", words: ["THINK"] },
+  { id: "letitbe", text: "Let it be.", by: "Paul McCartney, The Beatles", words: ["LET", "IT", "BE"] },
+  { id: "time", text: "Time flies.", by: "Virgil, Georgics", words: ["TIME", "FLIES"] },
+  { id: "less", text: "Less is more.", by: "Robert Browning, Andrea del Sarto", words: ["LESS", "IS", "MORE"] },
+  { id: "simple", text: "Keep it simple.", by: "Kelly Johnson, Lockheed Skunk Works", words: ["KEEP", "IT", "SIMPLE"] },
 ];
 
+// label: the word's name in the word model. hand: the picture shown while signing it.
 export const WORD_SIGNS = {
-  HELLO: { label: "hello", hand: "B", how: "Flat hand at your forehead, salute out." },
-  MOM: { label: "mom", hand: "B", how: "Open hand, fingers spread, tap your thumb on your chin." },
-  BYE: { label: "bye", hand: "B", how: "Open hand up, wave it." },
-  SLEEP: { label: "sleep", hand: "B", how: "Open hand in front of your face, pull it down as your fingers close." },
-  NOW: { label: "now", hand: "Y", how: "Bent hands, palms up, drop them a little in front of you." },
-  LOOK: { label: "look", hand: "V", how: "V fingers at your eyes, then point them forward." },
-  SNOW: { label: "snow", hand: "B", how: "Open hands up high, wiggle your fingers as they float down." },
-  YES: { label: "yes", hand: "S", how: "Make a fist and nod it up and down, like a head." },
-  FINE: { label: "fine", hand: "B", how: "Open hand, fingers spread, tap your thumb on your chest." },
-  HOT: { label: "hot", hand: "C", how: "Clawed hand at your mouth, twist it away fast." },
-  MILK: { label: "milk", hand: "S", how: "Squeeze your fist open and closed, like milking." },
-  WET: { label: "wet", hand: "B", how: "Hands by your chin, drop them while rubbing fingers on thumbs." },
-  PIG: { label: "pig", hand: "B", how: "Flat hand under your chin, flap your fingers down." },
+  WHY: { label: "why", hand: "Y", how: "Fingertips at your forehead, pull away into a Y hand." },
+  NOT: { label: "not", hand: "A", how: "Thumb under your chin, flick it forward." },
+  THINK: { label: "think", hand: "D", how: "Tap your pointer on your forehead." },
+  TIME: { label: "time", hand: "D", how: "Tap your pointer on the back of your other wrist." },
 };
 
 // One line per round, never the same one twice in a row.
@@ -105,8 +97,9 @@ export function advance(state) {
   const word = state.line.words[state.wordIndex];
   if (!state.signing) {
     const letterIndex = state.letterIndex + 1;
-    // Spelled the whole word: now sign it.
-    return { ...state, letterIndex, signing: letterIndex >= word.length, feedback: null };
+    if (letterIndex < word.length) return { ...state, letterIndex, feedback: null };
+    // Spelled the whole word: sign it, if the word model knows it; otherwise on to the next word.
+    if (WORD_SIGNS[word]) return { ...state, letterIndex, signing: true, feedback: null };
   }
   const wordIndex = state.wordIndex + 1;
   if (wordIndex >= state.line.words.length) {

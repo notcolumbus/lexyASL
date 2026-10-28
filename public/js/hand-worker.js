@@ -49,7 +49,8 @@ self.onmessage = async (event) => {
       } catch {
         /* bitmap already closed */
       }
-      self.postMessage({ type: "error", message: String(error) });
+      // One bad frame is not fatal: report "no hand" and keep tracking. Only a failed load is an error.
+      self.postMessage({ type: "landmarks", points: null, raw: null });
     }
   }
 };
