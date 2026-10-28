@@ -12,29 +12,35 @@ import {
   meter,
   popped,
   targetLetter,
+  targetWord,
   typeName,
-  FLAT_TOTAL,
+  WORD_SIGNS,
 } from "../public/js/session.js";
 
-test("a finished line totals 3200", () => {
+test("each word is spelled, then signed, and the line scores every step", () => {
   for (const line of LINES) {
     let state = begin(line);
     const seen = [];
     while (state.phase === "play") {
-      seen.push(targetLetter(state));
+      const word = targetWord(state);
+      seen.push(word ? `[${word}]` : targetLetter(state));
       state = advance(accept(state));
     }
-    assert.equal(seen.join(""), line.words.join(""));
+    assert.equal(seen.join(""), line.words.map((w) => w + `[${w}]`).join(""));
     assert.equal(state.phase, "summary");
+    const letters = line.words.join("").length;
+    assert.equal(state.points, letters * 200 + line.words.length * 400);
     const score = breakdown(state);
-    assert.equal(score.letterPoints, 1600);
-    assert.equal(score.wordPoints, 800);
-    assert.equal(score.sentencePoints, 800);
-    assert.equal(score.total, FLAT_TOTAL);
-    assert.equal(score.letterMult, 2);
-    assert.equal(score.sentenceMult, 2);
-    assert.equal(popped(state), true);
-    assert.equal(meter(state), 3);
+    assert.equal(score.total, letters * 400 + line.words.length * 400 + 800);
+    assert.ok(score.total <= 10000, String(score.total));
+    assert.equal(meter(state), 1);
+  }
+});
+
+test("every word has a sign and lines are three or four words", () => {
+  for (const line of LINES) {
+    assert.ok(line.words.length >= 3 && line.words.length <= 4, line.text);
+    for (const word of line.words) assert.ok(WORD_SIGNS[word], word);
   }
 });
 
@@ -57,8 +63,8 @@ test("an almost does not clear a letter", () => {
   assert.equal(almost(next, "Bring your thumb down more."), next);
 });
 
-test("the third sign pops the background", () => {
-  let state = begin(LINES[2]);
+test("the third letter pops the background", () => {
+  let state = begin(LINES.find((line) => line.words[0].length >= 3));
   state = advance(accept(state));
   state = advance(accept(state));
   assert.equal(popped(state), false);

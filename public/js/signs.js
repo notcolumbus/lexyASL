@@ -78,7 +78,8 @@ const FIX = {
 export const SUCCESS_SCORE = 0.25;
 export const ALMOST_SCORE = 0.1;
 
-export const LETTERS = Object.keys(SPECS);
+// Every letter that holds still. J and Z need motion the single-frame network can't see.
+export const LETTERS = [..."ABCDEFGHIKLMNOPQRSTUVWXY"];
 
 export function letterSpec(letter) {
   return SPECS[letter];
@@ -203,7 +204,7 @@ export function features(lm) {
   };
 }
 
-const TEMPLATES = Object.fromEntries(LETTERS.map((letter) => [letter, features(sample(letter))]));
+const TEMPLATES = Object.fromEntries(Object.keys(SPECS).map((letter) => [letter, features(sample(letter))]));
 
 function matchOne(feat, letter) {
   const template = TEMPLATES[letter];

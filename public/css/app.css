@@ -288,6 +288,32 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 .letters b.in { color: var(--ink); -webkit-text-stroke: 0; }
 .letters b.now { color: var(--dash); }
+/* Hangman blanks: unsigned letters are an underline only. */
+.letters b.wait, .letters b.now { width: 0.62em; height: 1em; border-bottom: 5px solid var(--ink); }
+.letters b.now { border-bottom-color: var(--dash); }
+
+.wordcall {
+  margin: 1.5vh 0 0;
+  text-align: center;
+  font-family: "Lilita One", "Arial Black", sans-serif;
+  font-size: clamp(24px, 4.2vh, 38px);
+  line-height: 1.05;
+  color: #fff;
+  -webkit-text-stroke: 5px var(--ink);
+  paint-order: stroke fill;
+}
+
+.wordbig {
+  margin: 0;
+  text-align: center;
+  font-family: "Lilita One", "Arial Black", sans-serif;
+  font-size: clamp(48px, 9vh, 72px);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--dash);
+  -webkit-text-stroke: 4px var(--ink);
+  paint-order: stroke fill;
+}
 
 .meterwrap { position: relative; height: 36px; }
 

@@ -1,15 +1,30 @@
+// Every word has a one-hand ASL sign the camera can check: its handshape plus some movement.
 export const LINES = [
-  { id: "day", text: "A DAY", words: ["A", "DAY"], pop: "cyan" },
-  { id: "fly", text: "I FLY", words: ["I", "FLY"], pop: "yellow" },
-  { id: "cow", text: "A COW", words: ["A", "COW"], pop: "cyan" },
+  { id: "happy", text: "I am happy", words: ["I", "AM", "HAPPY"] },
+  { id: "food", text: "We eat food", words: ["WE", "EAT", "FOOD"] },
+  { id: "water", text: "I love water", words: ["I", "LOVE", "WATER"] },
+  { id: "cats", text: "Big cats play", words: ["BIG", "CATS", "PLAY"] },
+  { id: "good", text: "I eat good food", words: ["I", "EAT", "GOOD", "FOOD"] },
 ];
 
-export const FLAT_TOTAL = 3200;
+// hand: the alphabet handshape the sign uses. how: what to do with it.
+export const WORD_SIGNS = {
+  I: { hand: "I", how: "Hold your I hand against your chest." },
+  AM: { hand: "A", how: "A hand at your lips, then move it forward." },
+  HAPPY: { hand: "B", how: "Flat hand brushes up your chest, twice." },
+  WE: { hand: "D", how: "Pointer taps one shoulder, then the other." },
+  EAT: { hand: "O", how: "Bunch your fingers and tap your mouth." },
+  FOOD: { hand: "O", how: "Bunch your fingers and tap your mouth, twice." },
+  LOVE: { hand: "S", how: "Cross your fists over your heart." },
+  WATER: { hand: "W", how: "Tap your W hand on your chin." },
+  BIG: { hand: "L", how: "L hand, pull it out wide." },
+  CATS: { hand: "F", how: "F hand at your cheek, pull out like whiskers." },
+  PLAY: { hand: "Y", how: "Y hand, shake it side to side." },
+  GOOD: { hand: "B", how: "Flat hand from your chin, move it forward." },
+};
 
-export function lineForDay(day) {
-  let hash = 0;
-  for (const ch of day) hash = (hash * 33 + ch.charCodeAt(0)) >>> 0;
-  return LINES[hash % LINES.length];
+export function randomLine() {
+  return LINES[Math.floor(Math.random() * LINES.length)];
 }
 
 export function lineById(id) {
@@ -27,6 +42,8 @@ export function begin(line) {
     wordIndex: 0,
     letterIndex: 0,
     cleared: 0,
+    signing: false,
+    points: 0,
     feedback: null,
     name: "",
     saved: false,
@@ -35,40 +52,49 @@ export function begin(line) {
 }
 
 export function targetLetter(state) {
-  if (state.phase !== "play") return "";
+  if (state.phase !== "play" || state.signing) return "";
   return state.line.words[state.wordIndex][state.letterIndex];
+}
+
+export function targetWord(state) {
+  if (state.phase !== "play" || !state.signing) return "";
+  return state.line.words[state.wordIndex];
 }
 
 export function popped(state) {
   return (state.cleared || 0) >= 3;
 }
 
+// Share of the sentence's letters signed so far.
 export function meter(state) {
-  return Math.min(3, state.cleared || 0);
+  const total = state.line.words.reduce((n, word) => n + word.length, 0);
+  return Math.min(1, (state.cleared || 0) / total);
 }
 
 export function accept(state) {
   if (state.phase !== "play" || state.feedback?.kind === "success") return state;
+  const points = state.signing ? 400 : 200;
   return {
     ...state,
-    cleared: state.cleared + 1,
-    feedback: { kind: "success", points: 200 },
+    cleared: state.signing ? state.cleared : state.cleared + 1,
+    points: state.points + points,
+    feedback: { kind: "success", points },
   };
 }
 
 export function advance(state) {
   if (state.phase !== "play" || state.feedback?.kind !== "success") return state;
   const word = state.line.words[state.wordIndex];
-  let wordIndex = state.wordIndex;
-  let letterIndex = state.letterIndex + 1;
-  if (letterIndex >= word.length) {
-    letterIndex = 0;
-    wordIndex += 1;
+  if (!state.signing) {
+    const letterIndex = state.letterIndex + 1;
+    // Spelled the whole word: now sign it.
+    return { ...state, letterIndex, signing: letterIndex >= word.length, feedback: null };
   }
+  const wordIndex = state.wordIndex + 1;
   if (wordIndex >= state.line.words.length) {
-    return { ...state, wordIndex, letterIndex, phase: "summary", feedback: null };
+    return { ...state, wordIndex, letterIndex: 0, signing: false, phase: "summary", feedback: null };
   }
-  return { ...state, wordIndex, letterIndex, feedback: null };
+  return { ...state, wordIndex, letterIndex: 0, signing: false, feedback: null };
 }
 
 export function almost(state, text) {

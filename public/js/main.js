@@ -10,18 +10,25 @@ import {
   breakdown,
   clearAlmost,
   lineById,
-  lineForDay,
   markSaved,
   meter,
   popped,
+  randomLine,
   targetLetter,
+  targetWord,
   typeName,
+  WORD_SIGNS,
 } from "./session.js";
 import { browserStore, load, pullScores, pushScore, record, todayKey, top } from "./storage.js";
 
 const HOLD_MS = 0;
 const FLASH_MS = 400;
 const ATTRACT_HOLD_MS = 320;
+// Word step: the sign's handshape held this long, plus this much wrist travel (in frame widths).
+const WORD_SHAPE_MS = 250;
+const WORD_TRAVEL = 0.08;
+// Kiosk: an untouched summary goes back to the start screen.
+const IDLE_MS = 45000;
 const GRAB_MS = 80;
 const BLUR_MS = 120;
 
@@ -39,7 +46,7 @@ const params = new URLSearchParams(location.search);
 let benchOn = params.get("bench") === "1";
 const store = browserStore();
 const today = todayKey(new Date());
-const line = lineById(params.get("line")) || lineForDay(today);
+const fixedLine = lineById(params.get("line"));
 
 let data = load(store);
 let state = attract();
@@ -59,6 +66,11 @@ let ghostKey = "";
 let status = "Tap Match up!";
 let naming = false;
 let note = "";
+let shapeMs = 0;
+let travel = 0;
+let lastWrist = null;
+let lastTick = 0;
+let lastInput = performance.now();
 
 const frameTimes = [];
 const drawTimes = [];
@@ -79,7 +91,7 @@ function paintKey() {
   if (state.phase === "attract") return `attract:${board}:${armed}:${camFailed}:${status}`;
   if (state.phase === "play") {
     const fb = state.feedback;
-    return `play:${state.wordIndex}:${state.letterIndex}:${state.cleared}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
+    return `play:${state.wordIndex}:${state.letterIndex}:${state.signing}:${state.points}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
   }
   return `summary:${state.line.id}:${state.name}:${state.saved}:${naming}:${status}:${top(data, 3).map((row) => row.points).join()}`;
 }
@@ -156,7 +168,8 @@ function slots() {
     for (let i = 0; i < word.length; i++) {
       const done = wordIndex < state.wordIndex || (wordIndex === state.wordIndex && i < state.letterIndex);
       const now = state.phase === "play" && wordIndex === state.wordIndex && i === state.letterIndex;
-      group.append(el("b", done ? "in" : now ? "now" : "wait", word[i]));
+      // Hangman: a letter shows only once it's signed. Follow the hand to find it.
+      group.append(el("b", done ? "in" : now ? "now" : "wait", done ? word[i] : ""));
     }
     row.append(group);
   });
@@ -167,8 +180,7 @@ function meterRow() {
   const wrap = el("div", "meterwrap");
   const bar = el("div", "meter");
   const fill = el("span");
-  const steps = meter(state);
-  fill.style.width = `${steps === 0 ? 8 : Math.round((steps / 3) * 100)}%`;
+  fill.style.width = `${Math.max(8, Math.round(meter(state) * 100))}%`;
   bar.append(fill);
   wrap.append(bar, el("b", popped(state) ? "mult on" : "mult", "+ 2x multiplier"));
   return wrap;
@@ -196,10 +208,18 @@ function successBanner() {
 }
 
 function drawPlay() {
-  const letter = targetLetter(state);
+  const word = targetWord(state);
+  const letter = word ? WORD_SIGNS[word].hand : targetLetter(state);
   const kind = state.feedback?.kind;
   setGhost(letter, kind === "success" ? "ok" : kind === "almost" ? "almost" : "guide");
-  hud.append(el("h1", "score", `Score: ${state.cleared * 200}`));
+  hud.append(el("h1", "score", `Score: ${state.points}`));
+  if (word && kind !== "success") {
+    hud.append(el("p", "wordcall", "Now sign out the word!"));
+    panel.append(coach(WORD_SIGNS[word].how), el("p", "wordbig", word), meterRow());
+    if (camFailed) panel.append(holdButton());
+    say(`Now sign the word ${word}. ${WORD_SIGNS[word].how}`);
+    return;
+  }
   if (kind === "success") {
     panel.append(successBanner());
     say(`Success! +${state.feedback.points}`);
@@ -207,15 +227,17 @@ function drawPlay() {
   }
   if (kind === "almost") panel.append(coach(state.feedback.text));
   panel.append(slots(), meterRow());
-  if (camFailed) {
-    const hold = el("button", "hold", "Hold to sign");
-    hold.dataset.act = "hold";
-    hold.type = "button";
-    panel.append(hold);
-  }
+  if (camFailed) panel.append(holdButton());
   const warn = trouble();
   if (warn) panel.append(warn);
   say(kind === "almost" ? state.feedback.text : `Sign ${letter}`);
+}
+
+function holdButton() {
+  const hold = el("button", "hold", "Hold to sign");
+  hold.dataset.act = "hold";
+  hold.type = "button";
+  return hold;
 }
 
 function money(n) {
@@ -321,21 +343,13 @@ async function enableCamera() {
   }
 }
 
-function stopCamera() {
-  stream?.getTracks().forEach((track) => track.stop());
-  stream = null;
-  video.srcObject = null;
-  camOn = false;
-  stage.classList.remove("live");
-}
-
 function beginPlay() {
   if (state.phase === "play") return;
   holdStart = 0;
   sawHandAt = 0;
   prevLm = null;
   nextLm = null;
-  dispatch(begin(line));
+  dispatch(begin(fixedLine || randomLine()));
   startHand(onStatus, onLandmarks);
   navigator.wakeLock?.request("screen").catch(() => {});
 }
@@ -349,7 +363,7 @@ async function onMatch() {
     return;
   }
   armed = true;
-  status = "Show your hand, or tap Start.";
+  status = "Hold up your pointer finger to start.";
   render();
 }
 
@@ -357,7 +371,17 @@ function finishFlash() {
   dispatch(advance(state));
   lockUntil = performance.now() + 220;
   holdStart = 0;
+  shapeMs = 0;
+  travel = 0;
+  lastWrist = null;
   if (state.phase === "summary") naming = false;
+}
+
+function backToStart() {
+  naming = false;
+  note = "";
+  status = camOn ? "Hold up your pointer finger to start." : "Tap Match up!";
+  dispatch(attract());
 }
 
 async function saveScore() {
@@ -378,6 +402,7 @@ async function saveScore() {
 }
 
 stage.addEventListener("click", (event) => {
+  lastInput = performance.now();
   const button = event.target.closest("[data-act]");
   if (!button) return;
   const act = button.dataset.act;
@@ -388,15 +413,7 @@ stage.addEventListener("click", (event) => {
     status = "";
     render();
   }
-  if (act === "again") {
-    stopCamera();
-    armed = false;
-    camFailed = false;
-    naming = false;
-    note = "";
-    status = "Tap Match up!";
-    dispatch(attract());
-  }
+  if (act === "again") backToStart();
   if (act === "key") dispatch(typeName(state, button.dataset.key));
   if (act === "save") saveScore();
 });
@@ -411,7 +428,9 @@ stage.addEventListener("pointerdown", (event) => {
 
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
-  if (state.phase === "play" && event.key.toUpperCase() === targetLetter(state)) {
+  lastInput = performance.now();
+  const typed = event.key.toUpperCase() === targetLetter(state) || (event.key === "Enter" && targetWord(state));
+  if (state.phase === "play" && typed) {
     dispatch(accept(state));
     window.clearTimeout(flashTimer);
     flashTimer = window.setTimeout(finishFlash, FLASH_MS);
@@ -423,7 +442,34 @@ window.addEventListener("keydown", (event) => {
   else if (event.key === "Enter") saveScore();
 });
 
+// ponytail: no word-sign model, so this checks the sign's handshape plus movement, not the exact motion path. Train a sequence model on word clips to grade the motion itself.
+function wordTick(now) {
+  const dt = lastTick ? now - lastTick : 0;
+  if (!nextLm) {
+    setMode("idle");
+    return;
+  }
+  const wrist = nextLm[0];
+  if (lastWrist && wrist !== lastWrist) travel += Math.hypot(wrist.x - lastWrist.x, wrist.y - lastWrist.y);
+  lastWrist = wrist;
+  const shape = judge(nextLm, WORD_SIGNS[targetWord(state)].hand).score >= ALMOST_SCORE;
+  if (shape) shapeMs += dt;
+  setMode(shape ? "ok" : "almost");
+  if (shapeMs >= WORD_SHAPE_MS && travel >= WORD_TRAVEL) {
+    dispatch(accept(state));
+    window.clearTimeout(flashTimer);
+    flashTimer = window.setTimeout(finishFlash, FLASH_MS);
+  }
+}
+
 function tick(now) {
+  if (state.phase === "summary" && now - lastInput > IDLE_MS) backToStart();
+  if (state.phase === "play" && targetWord(state) && now >= lockUntil && state.feedback?.kind !== "success") {
+    wordTick(now);
+    lastTick = now;
+    return;
+  }
+  lastTick = now;
   if (state.phase === "attract") {
     if (nextLm && camOn && judge(nextLm, "D").score >= SUCCESS_SCORE) {
       if (!sawHandAt) sawHandAt = now;
@@ -516,6 +562,14 @@ function reportBench() {
 
 render();
 requestAnimationFrame(loop);
+// Kiosk: turn the camera on right away so a raised finger starts the game with no tap.
+enableCamera().then((ok) => {
+  if (ok) return onMatch();
+  // No camera yet (permission not granted): leave the tap path for a person to retry.
+  camFailed = false;
+  status = "Tap Match up!";
+  render();
+});
 pullScores().then((scores) => {
   if (!scores) return;
   data = { ...data, scores };
