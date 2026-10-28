@@ -22,7 +22,7 @@ export function startHand(status, landmarks) {
     if (msg.type === "landmarks") {
       busy = false;
       window.clearTimeout(waitTimer);
-      onLandmarks(msg.points);
+      onLandmarks(msg.points, msg.raw);
       return;
     }
     if (msg.type === "error") {

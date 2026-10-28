@@ -1,6 +1,7 @@
 import { handIcon, paintBlur } from "./draw.js";
 import { pushFrame, startHand } from "./hand.js";
 import { ALMOST_SCORE, HOW, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
+import { WORD_LABELS, unpack, wordProbs } from "./words.js";
 import {
   accept,
   advance,
@@ -25,9 +26,12 @@ import { browserStore, load, pullScores, pushScore, record, todayKey, top } from
 const HOLD_MS = 350;
 const FLASH_MS = 400;
 const ATTRACT_HOLD_MS = 320;
-// Word step: the sign's handshape held this long, plus this much wrist travel (in frame widths).
-const WORD_SHAPE_MS = 250;
-const WORD_TRAVEL = 0.08;
+// Word step: PopSign's model reads the last 2 s of one hand, resampled to its 60 frames.
+const WORD_WINDOW_MS = 2000;
+const WORD_EVERY_MS = 250;
+// Hard to fail: the word only has to be in the model's top 3 at 10%+, twice in a row.
+const WORD_TOP = 3;
+const WORD_MIN_P = 0.1;
 // Kiosk: an untouched summary goes back to the start screen.
 const IDLE_MS = 45000;
 const GRAB_MS = 80;
@@ -69,9 +73,16 @@ let ghostKey = "";
 let status = "Tap Match up!";
 let naming = false;
 let note = "";
-let shapeMs = 0;
-let travel = 0;
-let lastWrist = null;
+let trail = [];
+let wordHits = 0;
+let lastWordAt = 0;
+let wordModel = null;
+fetch("./models/popsign-250.bin")
+  .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
+  .then((buf) => {
+    wordModel = unpack(buf);
+  })
+  .catch((error) => console.error("Word model didn't load:", error));
 let lastTick = 0;
 let lastInput = performance.now();
 
@@ -312,7 +323,9 @@ function setMode(mode) {
 
 let recent = [];
 
-function onLandmarks(points) {
+function onLandmarks(points, raw) {
+  const t = performance.now();
+  if (raw) trail = trail.filter((f) => t - f.t <= WORD_WINDOW_MS + 500).concat({ t, raw });
   prevLm = nextLm;
   nextLm = points;
   lmAt = performance.now();
@@ -379,9 +392,8 @@ function finishFlash() {
   lockUntil = performance.now() + 220;
   holdStart = 0;
   recent = [];
-  shapeMs = 0;
-  travel = 0;
-  lastWrist = null;
+  trail = [];
+  wordHits = 0;
   if (state.phase === "summary") naming = false;
 }
 
@@ -450,20 +462,51 @@ window.addEventListener("keydown", (event) => {
   else if (event.key === "Enter") saveScore();
 });
 
-// ponytail: no word-sign model, so this checks the sign's handshape plus movement, not the exact motion path. Train a sequence model on word clips to grade the motion itself.
+// The last WORD_WINDOW_MS of hand points, linearly resampled to the 60 even frames the model expects.
+function wordInput(now, mirror) {
+  const frames = trail.filter((f) => now - f.t <= WORD_WINDOW_MS);
+  if (frames.length < 8) return null;
+  const out = new Float32Array(60 * 42);
+  const start = now - WORD_WINDOW_MS;
+  let j = 0;
+  for (let i = 0; i < 60; i++) {
+    const at = start + (i / 59) * WORD_WINDOW_MS;
+    while (j < frames.length - 2 && frames[j + 1].t < at) j++;
+    const a = frames[j];
+    const b = frames[Math.min(j + 1, frames.length - 1)];
+    const k = b.t > a.t ? Math.max(0, Math.min(1, (at - a.t) / (b.t - a.t))) : 0;
+    for (let p = 0; p < 42; p++) {
+      const v = a.raw[p] + (b.raw[p] - a.raw[p]) * k;
+      out[i * 42 + p] = mirror && p % 2 === 0 ? 1 - v : v;
+    }
+  }
+  return out;
+}
+
+// ponytail: the model runs on the main thread, ~15 ms per read; move it into the hand worker if the camera stutters.
 function wordTick(now) {
-  const dt = lastTick ? now - lastTick : 0;
   if (!nextLm) {
     setMode("idle");
     return;
   }
-  const wrist = nextLm[0];
-  if (lastWrist && wrist !== lastWrist) travel += Math.hypot(wrist.x - lastWrist.x, wrist.y - lastWrist.y);
-  lastWrist = wrist;
-  const shape = judgeFrames(recent, WORD_SIGNS[targetWord(state)].hand).score >= ALMOST_SCORE;
-  if (shape) shapeMs += dt;
-  setMode(shape ? "ok" : "almost");
-  if (shapeMs >= WORD_SHAPE_MS && travel >= WORD_TRAVEL) {
+  if (!wordModel || now - lastWordAt < WORD_EVERY_MS) return;
+  lastWordAt = now;
+  const at = WORD_LABELS.indexOf(WORD_SIGNS[targetWord(state)].label);
+  let best = 0;
+  let inTop = false;
+  // Signers lead with either hand, and the training camera's mirroring is unknown: read both ways.
+  for (const mirror of [false, true]) {
+    const input = wordInput(now, mirror);
+    if (!input) return;
+    const probs = wordProbs(wordModel, input);
+    const p = probs[at];
+    const rank = probs.filter((v) => v > p).length;
+    best = Math.max(best, p);
+    if (rank < WORD_TOP && p >= WORD_MIN_P) inTop = true;
+  }
+  wordHits = inTop ? wordHits + 1 : 0;
+  setMode(inTop ? "ok" : best >= 0.02 ? "almost" : "hot");
+  if (wordHits >= 2) {
     dispatch(accept(state));
     window.clearTimeout(flashTimer);
     flashTimer = window.setTimeout(finishFlash, FLASH_MS);

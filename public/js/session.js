@@ -1,17 +1,18 @@
-// Every word has a one-hand ASL sign the camera can check: its handshape plus some movement.
+// Short and hard to fail: only letters with very distinct shapes, and every word is one
+// PopSign's word model knows. label: its name in the model. hand: the picture shown meanwhile.
 export const LINES = [
-  { id: "apples", text: "I like apples", words: ["I", "LIKE", "APPLES"] },
-  { id: "happy", text: "I'm so happy", words: ["IM", "SO", "HAPPY"] },
+  { id: "bye", text: "Bye bye, Dad", words: ["BYE", "BYE", "DAD"] },
+  { id: "wolf", text: "Bye, bad wolf", words: ["BYE", "BAD", "WOLF"] },
+  { id: "fall", text: "Dad will fall", words: ["DAD", "WILL", "FALL"] },
 ];
 
-// hand: the alphabet handshape the sign uses. how: what to do with it.
 export const WORD_SIGNS = {
-  I: { hand: "I", how: "Hold your I hand against your chest." },
-  IM: { hand: "I", how: "Hold your I hand against your chest." },
-  LIKE: { hand: "B", how: "Open hand on your chest, pull it away as your middle finger and thumb pinch." },
-  APPLES: { hand: "X", how: "Hooked pointer at your cheek, twist it." },
-  SO: { hand: "V", how: "V hands touch, then pull apart (the sign for VERY)." },
-  HAPPY: { hand: "B", how: "Flat hand brushes up your chest, twice." },
+  BYE: { label: "bye", hand: "B", how: "Open hand up, wave it." },
+  DAD: { label: "dad", hand: "B", how: "Open hand, fingers spread, tap your thumb on your forehead." },
+  BAD: { label: "bad", hand: "B", how: "Fingertips at your chin, then flip your hand down and away." },
+  WOLF: { label: "wolf", hand: "O", how: "Open hand at your nose, pull it forward into a point, like a snout." },
+  WILL: { label: "will", hand: "B", how: "Flat hand by your cheek, move it forward." },
+  FALL: { label: "fall", hand: "V", how: "Stand your V fingers on your other palm, then flip them off." },
 };
 
 export function randomLine() {

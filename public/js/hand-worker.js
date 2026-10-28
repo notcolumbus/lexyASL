@@ -40,7 +40,9 @@ self.onmessage = async (event) => {
       const points = raw
         ? raw.map((p) => ({ x: left ? p.x : 1 - p.x, y: p.y, z: p.z || 0 }))
         : null;
-      self.postMessage({ type: "landmarks", points });
+      // raw: the landmarker's own coordinates, unflipped, for the word model.
+      const flat = raw ? raw.flatMap((p) => [p.x, p.y]) : null;
+      self.postMessage({ type: "landmarks", points, raw: flat });
     } catch (error) {
       try {
         msg.bitmap.close();
