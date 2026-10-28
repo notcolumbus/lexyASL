@@ -35,8 +35,8 @@ const BAND = {
   middle: { dead: 0.28, span: 0.45 },
   ring: { dead: 0.28, span: 0.45 },
   pinky: { dead: 0.28, span: 0.45 },
-  thumbIndex: { dead: 0.2, span: 0.55 },
-  thumbMcp: { dead: 0.18, span: 0.45 },
+  thumbIndex: { dead: 0.3, span: 0.65 },
+  thumbMcp: { dead: 0.35, span: 0.6 },
   indexMiddle: { dead: 0.45, span: 1.2 },
   midRing: { dead: 0.45, span: 1.2 },
   ringPinky: { dead: 0.45, span: 1.2 },
@@ -75,8 +75,8 @@ const FIX = {
 };
 
 // Accept when this letter is the network's read. The bar is a probability, not a pose template.
-export const SUCCESS_SCORE = 0.35;
-export const ALMOST_SCORE = 0.15;
+export const SUCCESS_SCORE = 0.25;
+export const ALMOST_SCORE = 0.1;
 
 export const LETTERS = Object.keys(SPECS);
 
@@ -320,7 +320,7 @@ export function judge(lm, letter) {
   const best = LETTERS[bestAt];
   const p = probs[at];
   const feat = features(lm);
-  const near = best !== letter && p >= 0.3 && probs[bestAt] - p <= 0.08;
+  const near = best !== letter && p >= 0.2 && probs[bestAt] - p <= 0.15;
   if ((best === letter && p >= SUCCESS_SCORE) || near) {
     return { score: Math.max(p, SUCCESS_SCORE), correction: "", best: letter };
   }
