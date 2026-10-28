@@ -304,14 +304,20 @@ function hint(feat, letter, best) {
   return "Almost there!";
 }
 
+// Only letters the game asks for compete, so unplayable lookalikes (J for I, S/T/N for A) can't steal a match.
+const PLAYABLE = LETTERS.map((l) => WEIGHTS.letters.indexOf(l));
+
 export function judge(lm, letter) {
-  const at = WEIGHTS.letters.indexOf(letter);
+  const at = LETTERS.indexOf(letter);
   const vec = handVector(lm);
   if (at < 0 || !vec) return { score: 0, correction: "", best: "" };
-  const probs = predict(vec);
+  const all = predict(vec);
+  const kept = PLAYABLE.map((i) => all[i]);
+  const total = kept.reduce((a, c) => a + c, 0) || 1;
+  const probs = kept.map((v) => v / total);
   let bestAt = 0;
   for (let i = 1; i < probs.length; i++) if (probs[i] > probs[bestAt]) bestAt = i;
-  const best = WEIGHTS.letters[bestAt];
+  const best = LETTERS[bestAt];
   const p = probs[at];
   const feat = features(lm);
   const near = best !== letter && p >= 0.3 && probs[bestAt] - p <= 0.08;
