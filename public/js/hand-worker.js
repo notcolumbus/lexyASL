@@ -1,4 +1,5 @@
 let landmarker = null;
+let lastStamp = 0;
 
 self.onmessage = async (event) => {
   const msg = event.data;
@@ -14,7 +15,8 @@ self.onmessage = async (event) => {
             "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
           delegate: "CPU",
         },
-        runningMode: "IMAGE",
+        // VIDEO tracks the hand between frames instead of re-detecting it every time: steadier and faster.
+        runningMode: "VIDEO",
         numHands: 1,
         minHandDetectionConfidence: 0.3,
         minHandPresenceConfidence: 0.3,
@@ -28,12 +30,15 @@ self.onmessage = async (event) => {
   }
   if (msg.type === "frame" && landmarker) {
     try {
-      const result = landmarker.detect(msg.bitmap);
+      const result = landmarker.detectForVideo(msg.bitmap, (lastStamp = Math.max(lastStamp + 1, performance.now())));
       msg.bitmap.close();
       const raw = result.landmarks && result.landmarks[0] ? result.landmarks[0] : null;
-      // Training frames were mirrored into selfie view. The camera buffer is not.
+      // Training frames are right hands in selfie view; the camera buffer is not mirrored.
+      // MediaPipe labels handedness as if the image were mirrored, so on this raw buffer a real
+      // left hand reads "Right". Leaving that one unflipped turns it into a right hand for the model.
+      const left = result.handedness?.[0]?.[0]?.categoryName === "Right";
       const points = raw
-        ? raw.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z || 0 }))
+        ? raw.map((p) => ({ x: left ? p.x : 1 - p.x, y: p.y, z: p.z || 0 }))
         : null;
       self.postMessage({ type: "landmarks", points });
     } catch (error) {

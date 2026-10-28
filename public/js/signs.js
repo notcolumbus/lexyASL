@@ -305,23 +305,43 @@ function hint(feat, letter, best) {
   return "Almost there!";
 }
 
-// Only letters the game asks for compete, so unplayable lookalikes (J for I, S/T/N for A) can't steal a match.
+// Only letters the game asks for compete, so unplayable lookalikes (J for I) can't steal a match.
 const PLAYABLE = LETTERS.map((l) => WEIGHTS.letters.indexOf(l));
 
-export function judge(lm, letter) {
-  const at = LETTERS.indexOf(letter);
+function read(lm) {
   const vec = handVector(lm);
-  if (at < 0 || !vec) return { score: 0, correction: "", best: "" };
+  if (!vec) return null;
   const all = predict(vec);
   const kept = PLAYABLE.map((i) => all[i]);
   const total = kept.reduce((a, c) => a + c, 0) || 1;
-  const probs = kept.map((v) => v / total);
+  return kept.map((v) => v / total);
+}
+
+// Pointer up, other fingers folded: a plain geometry rule, so the kiosk wakes for any pointing finger.
+export function pointingUp(lm) {
+  const f = features(lm);
+  return !!f && f.index < 0.35 && f.middle > 0.45 && f.ring > 0.45 && f.pinky > 0.45;
+}
+
+export function judge(lm, letter) {
+  return judgeFrames(lm ? [lm] : [], letter);
+}
+
+// Average the read over the last few frames (SignAll-style min occurrence) so one noisy frame can't fail a sign.
+export function judgeFrames(frames, letter) {
+  const at = LETTERS.indexOf(letter);
+  const reads = frames.map(read).filter(Boolean);
+  if (at < 0 || !reads.length) return { score: 0, correction: "", best: "" };
+  const probs = reads[0].map((_, i) => reads.reduce((sum, r) => sum + r[i], 0) / reads.length);
+  const lm = frames[frames.length - 1];
   let bestAt = 0;
   for (let i = 1; i < probs.length; i++) if (probs[i] > probs[bestAt]) bestAt = i;
   const best = LETTERS[bestAt];
   const p = probs[at];
   const feat = features(lm);
-  const near = best !== letter && p >= 0.2 && probs[bestAt] - p <= 0.15;
+  // A close runner-up passes too: learners' hands are rough, and a kiosk should feel generous.
+  const second = probs.filter((_, i) => i !== bestAt).reduce((m, v) => Math.max(m, v), 0);
+  const near = best !== letter && p >= 0.4 && p === second;
   if ((best === letter && p >= SUCCESS_SCORE) || near) {
     return { score: Math.max(p, SUCCESS_SCORE), correction: "", best: letter };
   }

@@ -46,7 +46,8 @@ export function startHand(status, landmarks) {
 export function pushFrame(video) {
   if (!ready || busy || failed || video.readyState < 2) return;
   busy = true;
-  createImageBitmap(video, { resizeWidth: 224, resizeQuality: "low" })
+  // Full frame: the landmarker finds the hand, then crops it itself. Shrinking first left a far-away hand a few pixels wide.
+  createImageBitmap(video)
     .then((bitmap) => {
       if (!worker || failed) {
         bitmap.close();

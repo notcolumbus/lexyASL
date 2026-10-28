@@ -1,6 +1,6 @@
 import { handIcon, paintBlur } from "./draw.js";
 import { pushFrame, startHand } from "./hand.js";
-import { ALMOST_SCORE, SUCCESS_SCORE, judge } from "./signs.js";
+import { ALMOST_SCORE, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
 import {
   accept,
   advance,
@@ -30,6 +30,8 @@ const WORD_TRAVEL = 0.08;
 // Kiosk: an untouched summary goes back to the start screen.
 const IDLE_MS = 45000;
 const GRAB_MS = 80;
+// Frames the matcher votes over: about half a second at the grab rate.
+const VOTE_FRAMES = 5;
 const BLUR_MS = 120;
 
 const stage = document.querySelector("#stage");
@@ -307,10 +309,14 @@ function setMode(mode) {
   if (frame.dataset.mode !== mode) frame.dataset.mode = mode;
 }
 
+let recent = [];
+
 function onLandmarks(points) {
   prevLm = nextLm;
   nextLm = points;
   lmAt = performance.now();
+  // A lost hand clears the vote so an old pose can't carry over.
+  recent = points ? recent.concat([points]).slice(-VOTE_FRAMES) : [];
 }
 
 function onStatus(text) {
@@ -371,6 +377,7 @@ function finishFlash() {
   dispatch(advance(state));
   lockUntil = performance.now() + 220;
   holdStart = 0;
+  recent = [];
   shapeMs = 0;
   travel = 0;
   lastWrist = null;
@@ -452,7 +459,7 @@ function wordTick(now) {
   const wrist = nextLm[0];
   if (lastWrist && wrist !== lastWrist) travel += Math.hypot(wrist.x - lastWrist.x, wrist.y - lastWrist.y);
   lastWrist = wrist;
-  const shape = judge(nextLm, WORD_SIGNS[targetWord(state)].hand).score >= ALMOST_SCORE;
+  const shape = judgeFrames(recent, WORD_SIGNS[targetWord(state)].hand).score >= ALMOST_SCORE;
   if (shape) shapeMs += dt;
   setMode(shape ? "ok" : "almost");
   if (shapeMs >= WORD_SHAPE_MS && travel >= WORD_TRAVEL) {
@@ -471,7 +478,7 @@ function tick(now) {
   }
   lastTick = now;
   if (state.phase === "attract") {
-    if (nextLm && camOn && judge(nextLm, "D").score >= SUCCESS_SCORE) {
+    if (nextLm && camOn && pointingUp(nextLm)) {
       if (!sawHandAt) sawHandAt = now;
       setMode("hot");
       if (now - sawHandAt >= ATTRACT_HOLD_MS) beginPlay();
@@ -488,7 +495,7 @@ function tick(now) {
     dispatch(clearAlmost(state));
     return;
   }
-  const result = judge(nextLm, targetLetter(state));
+  const result = judgeFrames(recent, targetLetter(state));
   if (result.score >= SUCCESS_SCORE) {
     if (!holdStart) holdStart = now;
     setMode("ok");
