@@ -425,7 +425,7 @@ window.addEventListener("keydown", (event) => {
 
 function tick(now) {
   if (state.phase === "attract") {
-    if (nextLm && camOn) {
+    if (nextLm && camOn && judge(nextLm, "D").score >= SUCCESS_SCORE) {
       if (!sawHandAt) sawHandAt = now;
       setMode("hot");
       if (now - sawHandAt >= ATTRACT_HOLD_MS) beginPlay();
