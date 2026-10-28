@@ -79,10 +79,10 @@ export function meter(state) {
   return Math.min(1, (state.cleared || 0) / total);
 }
 
-// Points for one sign. accuracy 0..1 from the matcher: a clean letter 100-250, a clean word 200-400.
+// Points for one sign, never below the old flat 200 / 400: accuracy 0..1 adds up to 150 / 200 more.
 export function pointsFor(signing, accuracy) {
   const a = Math.max(0, Math.min(1, Number.isFinite(accuracy) ? accuracy : 0.5));
-  const [lo, hi] = signing ? [200, 400] : [100, 250];
+  const [lo, hi] = signing ? [400, 600] : [200, 350];
   return Math.round((lo + (hi - lo) * a) / 10) * 10;
 }
 

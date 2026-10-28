@@ -750,6 +750,19 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   clip: rect(0 0 0 0);
 }
 
+/* After a screen's first appearance, rebuilds of it don't replay the intro animations. */
+#stage:not(.fresh) .logo,
+#stage:not(.fresh) .board li,
+#stage:not(.fresh) .sumribbon,
+#stage:not(.fresh) .sumquote,
+#stage:not(.fresh) .sumline,
+#stage:not(.fresh) .sumplus,
+#stage:not(.fresh) .sumtotal,
+#stage:not(.fresh) .sumhint,
+#stage:not(.fresh) .streak,
+#stage:not(.fresh) .nameform { animation: none; }
+#stage:not(.fresh) .match { animation: sway 2.6s ease-in-out infinite, stripes 2.2s linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }

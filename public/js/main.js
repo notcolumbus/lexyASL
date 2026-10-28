@@ -81,6 +81,7 @@ let lockUntil = 0;
 let flashTimer = 0;
 let sawHandAt = 0;
 let lastPaint = "";
+let rendered = false;
 let ghostKey = "";
 let status = "Tap Match up!";
 let note = "";
@@ -117,7 +118,8 @@ function dispatch(next) {
 
 function paintKey() {
   const board = top(data, 3).map((row) => row.name + row.points).join(",");
-  if (state.phase === "attract") return `attract:${board}:${armed}:${camFailed}:${status}`;
+  // Only what the start screen shows: a tracker status it doesn't display shouldn't rebuild it.
+  if (state.phase === "attract") return `attract:${board}:${armed}:${camFailed}:${trouble() ? status : ""}`;
   if (state.phase === "play") {
     const fb = state.feedback;
     return `play:${state.wordIndex}:${state.letterIndex}:${state.signing}:${state.points}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
@@ -129,6 +131,10 @@ function render() {
   const key = paintKey();
   if (key === lastPaint) return;
   lastPaint = key;
+  // Entrance animations play once per screen; later rebuilds of the same screen (the board arriving,
+  // the camera arming) swap in quietly instead of replaying the whole intro.
+  stage.classList.toggle("fresh", stage.dataset.phase !== state.phase || !rendered);
+  rendered = true;
   stage.dataset.phase = state.phase;
   stage.classList.toggle("pop", state.phase === "play" && popped(state));
   stage.classList.toggle("win", state.phase === "play" && state.feedback?.kind === "success");
