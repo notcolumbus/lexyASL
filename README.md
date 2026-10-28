@@ -4,14 +4,26 @@ Browser-based ASL practice app with hand tracking.
 
 ## Run locally
 
-Serve this directory with a local web server, then open it in a browser. Camera access requires localhost or HTTPS.
+```sh
+npm ci
+npm run dev
+```
+
+Camera access requires localhost or HTTPS.
 
 ## Tests
 
 ```sh
-node --test
+npm test
 ```
 
 ## Deployment
 
-GitHub Actions tests and deploys the static app to GitHub Pages on every push to main. If automatic enablement is blocked, choose GitHub Actions under Settings → Pages → Source, then rerun the workflow.
+GitHub Actions runs the tests, then deploys the Cloudflare Worker on every push to main.
+
+Repository secrets, set under Settings → Secrets and variables → Actions:
+
+- `CLOUDFLARE_API_TOKEN` — API token with permission to edit Workers on this account
+- `CLOUDFLARE_ACCOUNT_ID` — the account id in `wrangler.jsonc`
+
+The Worker binds an R2 bucket named `lexy-asl-board`. Enable R2 on the account and create that bucket before the first deploy.

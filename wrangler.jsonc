@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lexy-asl",
+  "account_id": "f5a01b2a1b774ef900536723435cd5d0",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-27",
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "BOARD",
+      "bucket_name": "lexy-asl-board"
+    }
+  ]
+}

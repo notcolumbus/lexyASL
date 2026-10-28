@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { emptyData, load, record, top } from "../js/storage.js";
+import { emptyData, load, record, top } from "../public/js/storage.js";
 
 function memory() {
   let raw = null;

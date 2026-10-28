@@ -14,7 +14,7 @@ import {
   targetLetter,
   typeName,
   FLAT_TOTAL,
-} from "../js/session.js";
+} from "../public/js/session.js";
 
 test("a finished line totals 3200", () => {
   for (const line of LINES) {

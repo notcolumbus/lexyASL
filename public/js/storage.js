@@ -51,6 +51,33 @@ export function record(store, data, name, points, today) {
   return { data: next, streak };
 }
 
+export async function pullScores() {
+  try {
+    const res = await fetch("/api/board");
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body || !Array.isArray(body.scores)) return null;
+    return body.scores;
+  } catch {
+    return null;
+  }
+}
+
+export async function pushScore(name, points, day) {
+  try {
+    const res = await fetch("/api/board", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, points, day }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return Array.isArray(body.scores) ? body.scores : null;
+  } catch {
+    return null;
+  }
+}
+
 export function browserStore() {
   const key = "spellbound.v1";
   return {

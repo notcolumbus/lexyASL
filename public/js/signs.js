@@ -1,3 +1,5 @@
+import { WEIGHTS } from "./asl-weights.js";
+
 const SPECS = {
   A: { curls: [0, 1, 1, 1, 1], thumb: "pad", bend: 0.35, spread: 0.15 },
   B: { curls: [0, 0, 0, 0, 0], thumb: "across", bend: 0.95, spread: 0.02 },
@@ -72,8 +74,9 @@ const FIX = {
   ringPinky: ["Spread your ring finger and pinky.", "Bring your ring finger and pinky together."],
 };
 
-export const SUCCESS_SCORE = 0.57;
-export const ALMOST_SCORE = 0.38;
+// Accept when this letter is the network's read. The bar is a probability, not a pose template.
+export const SUCCESS_SCORE = 0.35;
+export const ALMOST_SCORE = 0.15;
 
 export const LETTERS = Object.keys(SPECS);
 
@@ -227,23 +230,96 @@ function matchOne(feat, letter) {
   return { raw, worst, worstKey, worstHigh };
 }
 
-export function judge(lm, letter) {
-  const feat = features(lm);
-  if (!feat || !TEMPLATES[letter]) return { score: 0, correction: "" };
-  const mine = matchOne(feat, letter);
-  let best = letter;
-  let bestRaw = mine.raw;
-  for (const other of LETTERS) {
-    if (other === letter) continue;
-    const raw = matchOne(feat, other).raw;
-    if (raw > bestRaw) {
-      best = other;
-      bestRaw = raw;
+function relu(v) {
+  return v > 0 ? v : 0;
+}
+
+function softmax(logits) {
+  let max = logits[0];
+  for (let i = 1; i < logits.length; i++) if (logits[i] > max) max = logits[i];
+  const ex = new Array(logits.length);
+  let sum = 0;
+  for (let i = 0; i < logits.length; i++) {
+    ex[i] = Math.exp(logits[i] - max);
+    sum += ex[i];
+  }
+  for (let i = 0; i < ex.length; i++) ex[i] /= sum;
+  return ex;
+}
+
+// 40 numbers: every landmark except the wrist, centered on the wrist and scaled by the longest reach.
+export function handVector(lm) {
+  if (!lm || lm.length < 21) return null;
+  const wrist = lm[0];
+  const rel = new Array(42);
+  let scale = 0;
+  for (let i = 0; i < 21; i++) {
+    const x = lm[i].x - wrist.x;
+    const y = lm[i].y - wrist.y;
+    rel[i * 2] = x;
+    rel[i * 2 + 1] = y;
+    const reach = Math.hypot(x, y);
+    if (reach > scale) scale = reach;
+  }
+  if (!(scale > 1e-4)) return null;
+  const out = new Array(40);
+  for (let i = 1; i < 21; i++) {
+    out[(i - 1) * 2] = rel[i * 2] / scale;
+    out[(i - 1) * 2 + 1] = rel[i * 2 + 1] / scale;
+  }
+  return out;
+}
+
+function predict(vec) {
+  const { mean, std, w, b, shape } = WEIGHTS;
+  let h = new Array(vec.length);
+  for (let i = 0; i < vec.length; i++) h[i] = (vec[i] - mean[i]) / std[i];
+  for (let layer = 0; layer < w.length; layer++) {
+    const inN = shape[layer];
+    const outN = shape[layer + 1];
+    const weights = w[layer];
+    const bias = b[layer];
+    const next = new Array(outN);
+    const last = layer === w.length - 1;
+    for (let o = 0; o < outN; o++) {
+      let sum = bias[o];
+      for (let i = 0; i < inN; i++) sum += h[i] * weights[i * outN + o];
+      next[o] = last ? sum : relu(sum);
+    }
+    h = next;
+  }
+  return softmax(h);
+}
+
+function hint(feat, letter, best) {
+  if (feat && TEMPLATES[letter]) {
+    const mine = matchOne(feat, letter);
+    if (mine.worst > 0.35) {
+      const curl = mine.worstKey === "thumb" || mine.worstKey === "index" || mine.worstKey === "middle" || mine.worstKey === "ring" || mine.worstKey === "pinky";
+      const tooMuch = curl ? !mine.worstHigh : mine.worstHigh;
+      return FIX[mine.worstKey][tooMuch ? 1 : 0];
     }
   }
-  const near = bestRaw - mine.raw <= 0.07;
-  const score = best === letter || near ? mine.raw : Math.min(mine.raw, 0.55);
-  const pair = FIX[mine.worstKey];
-  const correction = mine.worst > 0.45 ? pair[mine.worstHigh ? 1 : 0] : "Almost there!";
+  if (best && best !== letter) return `Closer to ${best}.`;
+  return "Almost there!";
+}
+
+export function judge(lm, letter) {
+  const at = WEIGHTS.letters.indexOf(letter);
+  const vec = handVector(lm);
+  if (at < 0 || !vec) return { score: 0, correction: "", best: "" };
+  const probs = predict(vec);
+  let bestAt = 0;
+  for (let i = 1; i < probs.length; i++) if (probs[i] > probs[bestAt]) bestAt = i;
+  const best = WEIGHTS.letters[bestAt];
+  const p = probs[at];
+  const feat = features(lm);
+  const near = best !== letter && p >= 0.3 && probs[bestAt] - p <= 0.08;
+  if ((best === letter && p >= SUCCESS_SCORE) || near) {
+    return { score: Math.max(p, SUCCESS_SCORE), correction: "", best: letter };
+  }
+  const correction = hint(feat, letter, best);
+  const score = p >= ALMOST_SCORE || best !== letter ? Math.min(Math.max(p, ALMOST_SCORE), SUCCESS_SCORE - 0.01) : p;
+  if (p < 0.08 && probs[bestAt] < 0.45) return { score: p, correction: "", best };
   return { score, correction, best };
 }

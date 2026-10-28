@@ -1,6 +1,6 @@
 import { handIcon, paintBlur } from "./draw.js";
 import { pushFrame, startHand } from "./hand.js";
-import { ALMOST_SCORE, SUCCESS_SCORE, judge, sample } from "./signs.js";
+import { ALMOST_SCORE, SUCCESS_SCORE, judge } from "./signs.js";
 import {
   accept,
   advance,
@@ -17,7 +17,7 @@ import {
   targetLetter,
   typeName,
 } from "./session.js";
-import { browserStore, load, record, todayKey, top } from "./storage.js";
+import { browserStore, load, pullScores, pushScore, record, todayKey, top } from "./storage.js";
 
 const HOLD_MS = 0;
 const FLASH_MS = 400;
@@ -57,7 +57,6 @@ let sawHandAt = 0;
 let lastPaint = "";
 let ghostKey = "";
 let status = "Tap Match up!";
-let practice = false;
 let naming = false;
 let note = "";
 
@@ -287,7 +286,6 @@ function setMode(mode) {
 }
 
 function onLandmarks(points) {
-  if (practice) return;
   prevLm = nextLm;
   nextLm = points;
   lmAt = performance.now();
@@ -362,7 +360,7 @@ function finishFlash() {
   if (state.phase === "summary") naming = false;
 }
 
-function saveScore() {
+async function saveScore() {
   const next = markSaved(state);
   if (next === state) {
     status = "Type at least two letters.";
@@ -371,6 +369,8 @@ function saveScore() {
   }
   const saved = record(store, data, next.name, breakdown(next).total, today);
   data = saved.data;
+  const remote = await pushScore(next.name, breakdown(next).total, today);
+  if (remote) data = { ...data, scores: remote };
   note = "";
   naming = false;
   status = "";
@@ -403,17 +403,10 @@ stage.addEventListener("click", (event) => {
 
 stage.addEventListener("pointerdown", (event) => {
   if (!event.target.closest("[data-act=hold]") || state.phase !== "play") return;
-  practice = true;
-  prevLm = nextLm;
-  nextLm = sample(targetLetter(state));
-  lmAt = performance.now();
-});
-
-window.addEventListener("pointerup", () => {
-  if (!practice) return;
-  practice = false;
-  nextLm = null;
-  holdStart = 0;
+  if (state.feedback?.kind === "success") return;
+  dispatch(accept(state));
+  window.clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(finishFlash, FLASH_MS);
 });
 
 window.addEventListener("keydown", (event) => {
@@ -523,3 +516,8 @@ function reportBench() {
 
 render();
 requestAnimationFrame(loop);
+pullScores().then((scores) => {
+  if (!scores) return;
+  data = { ...data, scores };
+  render();
+});

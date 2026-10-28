@@ -16,6 +16,9 @@ self.onmessage = async (event) => {
         },
         runningMode: "IMAGE",
         numHands: 1,
+        minHandDetectionConfidence: 0.3,
+        minHandPresenceConfidence: 0.3,
+        minTrackingConfidence: 0.3,
       });
       self.postMessage({ type: "ready" });
     } catch (error) {
@@ -27,7 +30,11 @@ self.onmessage = async (event) => {
     try {
       const result = landmarker.detect(msg.bitmap);
       msg.bitmap.close();
-      const points = result.landmarks && result.landmarks[0] ? result.landmarks[0] : null;
+      const raw = result.landmarks && result.landmarks[0] ? result.landmarks[0] : null;
+      // Training frames were mirrored into selfie view. The camera buffer is not.
+      const points = raw
+        ? raw.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z || 0 }))
+        : null;
       self.postMessage({ type: "landmarks", points });
     } catch (error) {
       try {
