@@ -19,6 +19,7 @@ import {
   popped,
   randomLine,
   setName,
+  skip,
   targetLetter,
   targetWord,
   validName,
@@ -34,9 +35,13 @@ const ATTRACT_HOLD_MS = 320;
 // Word step: PopSign's model reads the last 2 s of one hand, resampled to its 60 frames.
 const WORD_WINDOW_MS = 2000;
 const WORD_EVERY_MS = 250;
-// Hard to fail: the word only has to be in the model's top 3 at 10%+, twice in a row.
-const WORD_TOP = 3;
-const WORD_MIN_P = 0.1;
+// Hard to fail: the word only has to show up in the model's top 5 at 5%+, once.
+const WORD_TOP = 5;
+const WORD_MIN_P = 0.05;
+// ponytail: the word model hasn't been checked on real signers yet, so ~4 s of a visibly moving hand
+// also passes. Drop this once ?debug=1 shows the model reliably finds the words.
+const WORD_FALLBACK_MS = 4000;
+const WORD_FALLBACK_TRAVEL = 0.25;
 // Kiosk: an untouched summary goes back to the start screen.
 const IDLE_MS = 45000;
 const GRAB_MS = 80;
@@ -57,6 +62,7 @@ const fx = document.querySelector("#fx");
 
 const params = new URLSearchParams(location.search);
 let benchOn = params.get("bench") === "1";
+const debugOn = params.get("debug") === "1";
 const store = browserStore();
 const today = todayKey(new Date());
 const fixedLine = lineById(params.get("line"));
@@ -83,7 +89,7 @@ let nameError = "";
 let lastLineId = "";
 let wordShown = -1;
 let trail = [];
-let wordHits = 0;
+let wordSince = 0;
 let lastWordAt = 0;
 let wordModel = null;
 fetch("./models/popsign-250.bin")
@@ -253,6 +259,7 @@ function footer() {
     pub.append("Publish your score ", el("span", "", `(${money(state.points)})`));
     row.append(pub);
   } else row.append(el("span"));
+  row.append(el("p", "skiphint", "Space to skip"));
   const next = nextWord(state);
   if (next) {
     const tag = el("p", "nextword");
@@ -500,7 +507,7 @@ function finishFlash() {
   holdStart = 0;
   recent = [];
   trail = [];
-  wordHits = 0;
+  wordSince = 0;
   if (state.phase === "summary") draftName = "";
 }
 
@@ -562,6 +569,16 @@ stage.addEventListener("pointerdown", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
   lastInput = performance.now();
+  if (state.phase === "play" && event.key === " " && state.feedback?.kind !== "success") {
+    event.preventDefault();
+    dispatch(skip(state));
+    holdStart = 0;
+    recent = [];
+    trail = [];
+    wordSince = 0;
+    lockUntil = performance.now() + 220;
+    return;
+  }
   const typed = event.key.toUpperCase() === targetLetter(state) || (event.key === "Enter" && targetWord(state));
   if (state.phase === "play" && typed) {
     dispatch(accept(state));
@@ -593,13 +610,38 @@ function wordInput(now, mirror) {
 }
 
 // ponytail: the model runs on the main thread, ~15 ms per read; move it into the hand worker if the camera stutters.
+function passWord() {
+  dispatch(accept(state));
+  window.clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(finishFlash, FLASH_MS);
+}
+
+// How far the wrist moved over the last WORD_WINDOW_MS, in frame widths.
+function wristTravel(now) {
+  const frames = trail.filter((f) => now - f.t <= WORD_WINDOW_MS);
+  let sum = 0;
+  for (let i = 1; i < frames.length; i++) sum += Math.hypot(frames[i].raw[0] - frames[i - 1].raw[0], frames[i].raw[1] - frames[i - 1].raw[1]);
+  return sum;
+}
+
 function wordTick(now) {
+  if (!wordSince) wordSince = now;
   if (!nextLm) {
     setMode("idle");
     return;
   }
-  if (!wordModel || now - lastWordAt < WORD_EVERY_MS) return;
+  if (now - lastWordAt < WORD_EVERY_MS) return;
   lastWordAt = now;
+  const moving = wristTravel(now) >= WORD_FALLBACK_TRAVEL;
+  if (moving && now - wordSince >= WORD_FALLBACK_MS) {
+    if (debugOn) console.debug("word: passed on movement fallback");
+    passWord();
+    return;
+  }
+  if (!wordModel) {
+    setMode(moving ? "almost" : "hot");
+    return;
+  }
   const at = WORD_LABELS.indexOf(WORD_SIGNS[targetWord(state)].label);
   let best = 0;
   let inTop = false;
@@ -612,14 +654,13 @@ function wordTick(now) {
     const rank = probs.filter((v) => v > p).length;
     best = Math.max(best, p);
     if (rank < WORD_TOP && p >= WORD_MIN_P) inTop = true;
+    if (debugOn) {
+      const top3 = [...probs.keys()].sort((x, y) => probs[y] - probs[x]).slice(0, 3);
+      console.debug(`word ${mirror ? "mirrored" : "as-is"}: want ${WORD_LABELS[at]} #${rank + 1} ${(p * 100).toFixed(1)}% | top: ${top3.map((i) => `${WORD_LABELS[i]} ${(probs[i] * 100).toFixed(0)}%`).join(", ")}`);
+    }
   }
-  wordHits = inTop ? wordHits + 1 : 0;
-  setMode(inTop ? "ok" : best >= 0.02 ? "almost" : "hot");
-  if (wordHits >= 2) {
-    dispatch(accept(state));
-    window.clearTimeout(flashTimer);
-    flashTimer = window.setTimeout(finishFlash, FLASH_MS);
-  }
+  setMode(inTop ? "ok" : best >= 0.02 || moving ? "almost" : "hot");
+  if (inTop) passWord();
 }
 
 function tick(now) {

@@ -15,6 +15,7 @@ import {
   targetWord,
   setName,
   finishEarly,
+  skip,
   WORD_SIGNS,
 } from "../public/js/session.js";
 
@@ -108,4 +109,20 @@ test("attract has no play fields", () => {
 test("the sentence bank has six lines and skips the letters the model reads worst", () => {
   assert.equal(LINES.length, 6);
   for (const line of LINES) assert.doesNotMatch(line.words.join(""), /[ACDUVJZ]/, line.text);
+});
+
+test("space-skip moves past a letter and a word without scoring them", () => {
+  let state = begin(LINES[0]);
+  const word = LINES[0].words[0];
+  for (let i = 0; i < word.length; i++) state = skip(state);
+  assert.equal(state.signing, true);
+  state = skip(state);
+  assert.equal(state.wordIndex, 1);
+  assert.equal(state.points, 0);
+  assert.equal(breakdown(state).letters, 0);
+  assert.equal(breakdown(state).words, 0);
+  let last = begin(LINES[0]);
+  while (last.phase === "play") last = skip(last);
+  assert.equal(last.phase, "summary");
+  assert.equal(breakdown(last).total, 0, "skipping everything scores nothing, not even the sentence bonus");
 });

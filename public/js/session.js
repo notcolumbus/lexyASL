@@ -115,6 +115,12 @@ export function clearAlmost(state) {
   return { ...state, feedback: null };
 }
 
+// Skip the current letter or word: move on, no points, and it doesn't count toward the summary.
+export function skip(state) {
+  if (state.phase !== "play" || state.feedback?.kind === "success") return state;
+  return advance({ ...state, skipped: (state.skipped || 0) + 1, feedback: { kind: "success", points: 0 } });
+}
+
 export function nextWord(state) {
   if (state.phase !== "play") return "";
   return state.line.words[state.wordIndex + 1] || "";
@@ -130,7 +136,8 @@ export function finishEarly(state) {
 export function breakdown(state) {
   const letters = state.cleared || 0;
   const words = state.signed || 0;
-  const sentence = state.finished ? 1 : 0;
+  // The sentence bonus is for signing all of it: any skip forfeits it.
+  const sentence = state.finished && !state.skipped ? 1 : 0;
   const letterMult = letters >= 3 ? 2 : 1;
   const wordMult = 3;
   const sentenceMult = 5;

@@ -500,6 +500,7 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   animation: rise 400ms backwards;
 }
 .pubnow span { color: #9a9a9a; }
+.skiphint { margin: 0; font-weight: 800; font-size: 13px; color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
 .nextword {
   margin: 0 -18px 0 0;
   background: #fff;
