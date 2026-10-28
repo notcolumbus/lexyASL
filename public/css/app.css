@@ -585,7 +585,6 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     linear-gradient(90deg, var(--c1), var(--c2));
   box-shadow: inset 0 6px 0 var(--bevel), inset 0 -6px 0 var(--deep);
   clip-path: polygon(0 0, 100% 0, 95% 50%, 100% 100%, 0 100%);
-  animation: stripes 2.2s linear infinite;
 }
 .face .body::before, .face .body::after {
   content: "";
@@ -614,14 +613,16 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .face.orange { --c1: #f59a31; --c2: #ec6223; --bevel: #fbb46c; --deep: #c94d16; --line: #e5541a; }
 .face.violet { --c1: #ec9ff0; --c2: #d878df; --bevel: #f6c9f8; --deep: #a94cb3; --line: #b552c4; }
 .face.yellow { --c1: #ffe56b; --c2: #f8c51c; --bevel: #fff3a8; --deep: #c99300; --line: #e39a0c; }
-/* Timer between variants, as in the prototype: each face holds ~1.6 s, then the next fades in. The band itself stays still. */
-.match.cycle .face { opacity: 0; animation: variant 4.8s calc(var(--n) * 1.6s) infinite backwards; }
+/* Timer between variants, as in the prototype: each band scoots in from the left, holds ~1.2 s,
+   then scoots out to the right as the next one comes in behind it. */
+.match.cycle .face { transform: rotate(-4deg) translateX(-120%); animation: variant 4.8s calc(var(--n) * 1.6s) infinite backwards; }
 @keyframes variant {
-  0% { opacity: 0; }
-  4%, 35% { opacity: 1; }
+  0% { transform: rotate(-4deg) translateX(-120%); animation-timing-function: cubic-bezier(0.2, 1, 0.3, 1); }
+  8%, 30% { transform: rotate(-4deg) translateX(0); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  36%, 100% { transform: rotate(-4deg) translateX(120%); }
+}
   39%, 100% { opacity: 0; }
 }
-@keyframes stripes { to { background-position: 0 0, 100% 0, 0 0; } }
 
 .hold {
   border: 3px solid var(--ink);
