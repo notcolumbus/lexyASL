@@ -1,22 +1,35 @@
-// Short and hard to fail: only letters with very distinct shapes, and every word is one
-// PopSign's word model knows. label: its name in the model. hand: the picture shown meanwhile.
+// Six short lines that are hard to fail. Every letter is one the letter model gets 94%+ right on
+// signers it never saw (no A, C, D, U, V), and every word is one PopSign's word model knows.
+// label: the word's name in that model. hand: the picture shown while signing it.
 export const LINES = [
-  { id: "bye", text: "Bye bye, Dad", words: ["BYE", "BYE", "DAD"] },
-  { id: "wolf", text: "Bye, bad wolf", words: ["BYE", "BAD", "WOLF"] },
-  { id: "fall", text: "Dad will fall", words: ["DAD", "WILL", "FALL"] },
+  { id: "hello", text: "Hello, Mom, bye!", words: ["HELLO", "MOM", "BYE"] },
+  { id: "sleep", text: "Sleep now, Mom", words: ["SLEEP", "NOW", "MOM"] },
+  { id: "snow", text: "Mom, look, snow!", words: ["MOM", "LOOK", "SNOW"] },
+  { id: "fine", text: "Yes! Fine! Bye!", words: ["YES", "FINE", "BYE"] },
+  { id: "milk", text: "Hot milk now", words: ["HOT", "MILK", "NOW"] },
+  { id: "pig", text: "Hello, wet pig!", words: ["HELLO", "WET", "PIG"] },
 ];
 
 export const WORD_SIGNS = {
+  HELLO: { label: "hello", hand: "B", how: "Flat hand at your forehead, salute out." },
+  MOM: { label: "mom", hand: "B", how: "Open hand, fingers spread, tap your thumb on your chin." },
   BYE: { label: "bye", hand: "B", how: "Open hand up, wave it." },
-  DAD: { label: "dad", hand: "B", how: "Open hand, fingers spread, tap your thumb on your forehead." },
-  BAD: { label: "bad", hand: "B", how: "Fingertips at your chin, then flip your hand down and away." },
-  WOLF: { label: "wolf", hand: "O", how: "Open hand at your nose, pull it forward into a point, like a snout." },
-  WILL: { label: "will", hand: "B", how: "Flat hand by your cheek, move it forward." },
-  FALL: { label: "fall", hand: "V", how: "Stand your V fingers on your other palm, then flip them off." },
+  SLEEP: { label: "sleep", hand: "B", how: "Open hand in front of your face, pull it down as your fingers close." },
+  NOW: { label: "now", hand: "Y", how: "Bent hands, palms up, drop them a little in front of you." },
+  LOOK: { label: "look", hand: "V", how: "V fingers at your eyes, then point them forward." },
+  SNOW: { label: "snow", hand: "B", how: "Open hands up high, wiggle your fingers as they float down." },
+  YES: { label: "yes", hand: "S", how: "Make a fist and nod it up and down, like a head." },
+  FINE: { label: "fine", hand: "B", how: "Open hand, fingers spread, tap your thumb on your chest." },
+  HOT: { label: "hot", hand: "C", how: "Clawed hand at your mouth, twist it away fast." },
+  MILK: { label: "milk", hand: "S", how: "Squeeze your fist open and closed, like milking." },
+  WET: { label: "wet", hand: "B", how: "Hands by your chin, drop them while rubbing fingers on thumbs." },
+  PIG: { label: "pig", hand: "B", how: "Flat hand under your chin, flap your fingers down." },
 };
 
-export function randomLine() {
-  return LINES[Math.floor(Math.random() * LINES.length)];
+// One line per round, never the same one twice in a row.
+export function randomLine(lastId = "") {
+  const pool = LINES.filter((line) => line.id !== lastId);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 export function lineById(id) {
@@ -34,6 +47,7 @@ export function begin(line) {
     wordIndex: 0,
     letterIndex: 0,
     cleared: 0,
+    signed: 0,
     signing: false,
     points: 0,
     feedback: null,
@@ -69,6 +83,7 @@ export function accept(state) {
   return {
     ...state,
     cleared: state.signing ? state.cleared : state.cleared + 1,
+    signed: state.signing ? state.signed + 1 : state.signed,
     points: state.points + points,
     feedback: { kind: "success", points },
   };
@@ -84,7 +99,7 @@ export function advance(state) {
   }
   const wordIndex = state.wordIndex + 1;
   if (wordIndex >= state.line.words.length) {
-    return { ...state, wordIndex, letterIndex: 0, signing: false, phase: "summary", feedback: null };
+    return { ...state, wordIndex, letterIndex: 0, signing: false, phase: "summary", finished: true, feedback: null };
   }
   return { ...state, wordIndex, letterIndex: 0, signing: false, feedback: null };
 }
@@ -100,18 +115,32 @@ export function clearAlmost(state) {
   return { ...state, feedback: null };
 }
 
+export function nextWord(state) {
+  if (state.phase !== "play") return "";
+  return state.line.words[state.wordIndex + 1] || "";
+}
+
+// "Publish your score" mid-round: stop here and score what's done.
+export function finishEarly(state) {
+  if (state.phase !== "play" || state.points <= 0) return state;
+  return { ...state, phase: "summary", finished: false, signing: false, feedback: null };
+}
+
+// What was actually signed, at the multipliers on the design: letters 2x (after 3), words 3x, sentence 5x.
 export function breakdown(state) {
-  const letters = state.line.words.reduce((n, word) => n + word.length, 0);
-  const words = state.line.words.length;
-  const letterMult = state.cleared >= 3 ? 2 : 1;
-  const wordMult = 2;
-  const sentenceMult = letterMult === 2 && wordMult === 2 ? 2 : 1;
+  const letters = state.cleared || 0;
+  const words = state.signed || 0;
+  const sentence = state.finished ? 1 : 0;
+  const letterMult = letters >= 3 ? 2 : 1;
+  const wordMult = 3;
+  const sentenceMult = 5;
   const letterPoints = letters * 200 * letterMult;
   const wordPoints = words * 200 * wordMult;
-  const sentencePoints = 400 * sentenceMult;
+  const sentencePoints = sentence * 400 * sentenceMult;
   return {
     letters,
     words,
+    sentence,
     letterMult,
     wordMult,
     sentenceMult,
@@ -122,14 +151,21 @@ export function breakdown(state) {
   };
 }
 
-export function typeName(state, key) {
+// Names as people write them ("Elaina G."): letters, spaces, . ' - ; 2 to 14 characters.
+export function cleanName(text) {
+  return String(text || "").replace(/[^A-Za-z .'-]/g, "").replace(/\s+/g, " ").trimStart().slice(0, 14);
+}
+
+export function validName(text) {
+  return /^[A-Za-z][A-Za-z .'-]{1,13}$/.test(String(text || "").trim());
+}
+
+export function setName(state, text) {
   if (state.phase !== "summary" || state.saved) return state;
-  if (key === "back") return { ...state, name: state.name.slice(0, -1) };
-  if (/^[A-Z]$/.test(key) && state.name.length < 8) return { ...state, name: state.name + key };
-  return state;
+  return { ...state, name: cleanName(text) };
 }
 
 export function markSaved(state) {
-  if (state.phase !== "summary" || state.saved || state.name.trim().length < 2) return state;
-  return { ...state, saved: true };
+  if (state.phase !== "summary" || state.saved || !validName(state.name)) return state;
+  return { ...state, name: state.name.trim(), saved: true };
 }

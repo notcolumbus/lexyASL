@@ -1,4 +1,5 @@
-import { handIcon, paintBlur } from "./draw.js";
+import { paintBlur } from "./draw.js";
+import { OUTLINES } from "./outlines.js";
 import { pushFrame, startHand } from "./hand.js";
 import { ALMOST_SCORE, HOW, SUCCESS_SCORE, judgeFrames, pointingUp } from "./signs.js";
 import { WORD_LABELS, unpack, wordProbs } from "./words.js";
@@ -10,21 +11,25 @@ import {
   begin,
   breakdown,
   clearAlmost,
+  finishEarly,
   lineById,
   markSaved,
   meter,
+  nextWord,
   popped,
   randomLine,
+  setName,
   targetLetter,
   targetWord,
-  typeName,
+  validName,
   WORD_SIGNS,
 } from "./session.js";
 import { browserStore, load, pullScores, pushScore, record, todayKey, top } from "./storage.js";
 
 // A letter must stay right this long before it counts, so a hand passing through a shape doesn't score.
 const HOLD_MS = 350;
-const FLASH_MS = 400;
+// Long enough for the success beat: +points pops, flies to the score, banner slides through.
+const FLASH_MS = 1100;
 const ATTRACT_HOLD_MS = 320;
 // Word step: PopSign's model reads the last 2 s of one hand, resampled to its 60 frames.
 const WORD_WINDOW_MS = 2000;
@@ -48,6 +53,7 @@ const panel = document.querySelector("#panel");
 const pop = document.querySelector("#pop");
 const live = document.querySelector("#live");
 const frame = document.querySelector("#frame");
+const fx = document.querySelector("#fx");
 
 const params = new URLSearchParams(location.search);
 let benchOn = params.get("bench") === "1";
@@ -71,8 +77,11 @@ let sawHandAt = 0;
 let lastPaint = "";
 let ghostKey = "";
 let status = "Tap Match up!";
-let naming = false;
 let note = "";
+let draftName = "";
+let nameError = "";
+let lastLineId = "";
+let wordShown = -1;
 let trail = [];
 let wordHits = 0;
 let lastWordAt = 0;
@@ -107,7 +116,7 @@ function paintKey() {
     const fb = state.feedback;
     return `play:${state.wordIndex}:${state.letterIndex}:${state.signing}:${state.points}:${fb?.kind || ""}:${fb?.text || ""}:${camFailed}:${status}`;
   }
-  return `summary:${state.line.id}:${state.name}:${state.saved}:${naming}:${status}:${top(data, 3).map((row) => row.points).join()}`;
+  return `summary:${state.line.id}:${state.saved}:${nameError}:${board}`;
 }
 
 function render() {
@@ -115,14 +124,12 @@ function render() {
   if (key === lastPaint) return;
   lastPaint = key;
   stage.dataset.phase = state.phase;
-  stage.classList.toggle("naming", state.phase === "summary" && naming);
   stage.classList.toggle("pop", state.phase === "play" && popped(state));
+  stage.classList.toggle("win", state.phase === "play" && state.feedback?.kind === "success");
   stage.classList.toggle("nocam", camFailed);
   hud.replaceChildren();
   panel.replaceChildren();
-  const popping = state.phase === "play" && state.feedback?.kind === "success";
-  pop.textContent = popping ? `+${state.feedback.points}` : "";
-  pop.hidden = !popping;
+  pop.hidden = true;
   if (state.phase === "attract") drawAttract();
   else if (state.phase === "play") drawPlay();
   else drawSummary();
@@ -135,28 +142,51 @@ function el(tag, className, text) {
   return node;
 }
 
+// The hand picture plus a dashed outline traced from it. The dashes march (stroke-dashoffset loop);
+// a new picture scales in from nothing.
 function setGhost(letter, mode) {
   const key = `${letter}:${mode}`;
   if (key === ghostKey) return;
+  const fresh = !ghostKey.startsWith(`${letter}:`);
   ghostKey = key;
-  ghost.innerHTML = handIcon(letter, mode);
+  const name = /^[a-z]$/i.test(letter || "") ? letter.toLowerCase() : "a";
+  ghost.innerHTML = `<svg class="sign ${mode}${fresh ? " enter" : ""}" viewBox="-14 -14 128 128" aria-hidden="true">
+    <image class="pic" href="./assets/hands/${name}.png" x="0" y="0" width="100" height="100" />
+    <path class="dash" d="${OUTLINES[name]}" />
+  </svg>`;
 }
 
-function board() {
-  const list = el("ol", "pills");
-  top(data, 3).forEach((row, index) => {
-    const item = el("li");
-    item.append(el("b", "rank", `#${index + 1}`), el("span", "", row.name));
+// Home: striped, staggered pills. Summary: outlined colored text. Empty board: an invitation.
+function board(style) {
+  const list = el("ol", `board ${style}`);
+  const rows = top(data, 3);
+  if (!rows.length) {
+    const item = el("li", "empty");
+    item.append(el("span", "", "Be the first on the board!"));
     list.append(item);
-  });
+  }
+  const row = (entry, rank, index) => {
+    const item = el("li");
+    item.style.setProperty("--i", index);
+    if (state.saved && entry.name === state.name) item.classList.add("you");
+    item.append(el("b", "rank", `#${rank}`), el("span", "who", entry.name));
+    list.append(item);
+  };
+  rows.forEach((entry, index) => row(entry, index + 1, index));
+  // Just saved but outside the top 3: still show where you landed.
+  if (style === "list" && state.saved && !rows.some((entry) => entry.name === state.name)) {
+    const all = top(data, 1000);
+    const at = all.findIndex((entry) => entry.name === state.name);
+    if (at >= 0) row(all[at], at + 1, 3);
+  }
   return list;
 }
 
-function ribbon(label, act) {
-  const button = el("button", "match");
+function ribbon(label, act, tone = "") {
+  const button = el("button", `match ${tone}`);
   button.type = "button";
   button.dataset.act = act;
-  button.append(el("i", "gem"), document.createTextNode(label), el("i", "gem"));
+  button.append(el("i", "gem top"), el("span", "label", label), el("i", "gem bottom"));
   return button;
 }
 
@@ -167,7 +197,7 @@ function trouble() {
 
 function drawAttract() {
   setGhost("D", "guide");
-  hud.append(el("h1", "logo", "SPELLBOUND"), board());
+  hud.append(el("h1", "logo", "SPELLBOUND"), board("home"));
   if (note) hud.append(el("p", "note", note));
   panel.append(ribbon("Match up!", armed ? "start" : "match"));
   const warn = trouble();
@@ -175,18 +205,20 @@ function drawAttract() {
   say(status);
 }
 
-function slots() {
-  const row = el("div", "letters");
-  state.line.words.forEach((word, wordIndex) => {
-    const group = el("span", "word");
-    for (let i = 0; i < word.length; i++) {
-      const done = wordIndex < state.wordIndex || (wordIndex === state.wordIndex && i < state.letterIndex);
-      const now = state.phase === "play" && wordIndex === state.wordIndex && i === state.letterIndex;
-      // Hangman: a letter shows only once it's signed. Follow the hand to find it.
-      group.append(el("b", done ? "in" : now ? "now" : "wait", done ? word[i] : ""));
-    }
-    row.append(group);
-  });
+// The current word's letters as platforms. A new word's platforms drop in one by one, 400 ms apart.
+function platforms() {
+  const word = state.line.words[state.wordIndex] || "";
+  const row = el("div", "platforms");
+  const fresh = wordShown !== state.wordIndex;
+  wordShown = state.wordIndex;
+  for (let i = 0; i < word.length; i++) {
+    const done = i < state.letterIndex || state.signing;
+    const slot = el("span", `slot ${done ? "in" : i === state.letterIndex ? "now" : "wait"}${fresh ? " fresh" : ""}`);
+    slot.style.setProperty("--i", i);
+    // Hangman: a letter shows only once it's signed. Follow the hand to find it.
+    slot.append(el("b", "", done ? word[i] : ""), el("i"));
+    row.append(slot);
+  }
   return row;
 }
 
@@ -194,7 +226,7 @@ function meterRow() {
   const wrap = el("div", "meterwrap");
   const bar = el("div", "meter");
   const fill = el("span");
-  fill.style.width = `${Math.max(8, Math.round(meter(state) * 100))}%`;
+  fill.style.width = `${Math.max(6, Math.round(meter(state) * 100))}%`;
   bar.append(fill);
   wrap.append(bar, el("b", popped(state) ? "mult on" : "mult", "+ 2x multiplier"));
   return wrap;
@@ -212,6 +244,52 @@ function coach(text) {
   return node;
 }
 
+function footer() {
+  const row = el("div", "foot");
+  if (state.points > 0) {
+    const pub = el("button", "pubnow");
+    pub.type = "button";
+    pub.dataset.act = "finish";
+    pub.append("Publish your score ", el("span", "", `(${money(state.points)})`));
+    row.append(pub);
+  } else row.append(el("span"));
+  const next = nextWord(state);
+  if (next) {
+    const tag = el("p", "nextword");
+    tag.append("Next: ", el("b", "", `'${next.toLowerCase()}'`));
+    row.append(tag);
+  }
+  return row;
+}
+
+function drawPlay() {
+  const word = targetWord(state);
+  const letter = word ? WORD_SIGNS[word].hand : targetLetter(state);
+  const kind = state.feedback?.kind;
+  setGhost(letter, kind === "success" ? "ok" : kind === "almost" ? "almost" : "guide");
+  const shown = kind === "success" ? state.points - state.feedback.points : state.points;
+  hud.append(el("h1", "score", `Score: ${money(shown)}`));
+  if (kind === "success") {
+    celebrate(state.feedback.points);
+    panel.append(successBanner());
+    say(`Success! +${state.feedback.points}`);
+    return;
+  }
+  if (word) {
+    hud.append(el("p", "wordcall", "Now sign out the word!"));
+    panel.append(coach(WORD_SIGNS[word].how), el("p", "wordbig", word), meterRow(), footer());
+    if (camFailed) panel.append(holdButton());
+    say(`Now sign the word ${word}. ${WORD_SIGNS[word].how}`);
+    return;
+  }
+  // The how-to stays up the whole time: the blanks hide the letter, this says how to make it.
+  panel.append(coach(HOW[letter]), platforms(), meterRow(), footer());
+  if (camFailed) panel.append(holdButton());
+  const warn = trouble();
+  if (warn) panel.append(warn);
+  say(kind === "almost" ? state.feedback.text : `Sign ${letter}`);
+}
+
 function successBanner() {
   const banner = el("div", "banner");
   banner.append(el("p", "", "Success!"));
@@ -221,30 +299,51 @@ function successBanner() {
   return banner;
 }
 
-function drawPlay() {
-  const word = targetWord(state);
-  const letter = word ? WORD_SIGNS[word].hand : targetLetter(state);
-  const kind = state.feedback?.kind;
-  setGhost(letter, kind === "success" ? "ok" : kind === "almost" ? "almost" : "guide");
-  hud.append(el("h1", "score", `Score: ${state.points}`));
-  if (word && kind !== "success") {
-    hud.append(el("p", "wordcall", "Now sign out the word!"));
-    panel.append(coach(WORD_SIGNS[word].how), el("p", "wordbig", word), meterRow());
-    if (camFailed) panel.append(holdButton());
-    say(`Now sign the word ${word}. ${WORD_SIGNS[word].how}`);
-    return;
+const SWOOSH = `<svg class="swoosh" viewBox="0 0 400 520" aria-hidden="true">
+  <path d="M70 160 C 90 90, 150 60, 205 70" /><circle cx="78" cy="150" r="16" /><circle cx="128" cy="96" r="5" class="dot" />
+  <path d="M60 330 C 70 220, 130 150, 200 145" /><path d="M300 95 C 340 110, 360 140, 365 175" /><path d="M352 160 l 14 16 l 10 -20" />
+  <path d="M290 200 C 330 220, 345 260, 335 300" /><circle cx="340" cy="250" r="4" class="dot" />
+  <path d="M40 450 C 30 380, 55 330, 100 320" /><path d="M70 330 l -6 24 l 22 -8" /><circle cx="95" cy="300" r="12" />
+  <path d="M110 420 C 110 390, 120 370, 135 355" /><circle cx="150" cy="470" r="4" class="dot" />
+  <path d="M300 340 C 345 380, 360 430, 350 480" /><circle cx="322" cy="372" r="16" /><path d="M335 470 l 0 22" /><path d="M324 481 l 22 0" />
+</svg>`;
+
+// Success beat: green swooshes draw in, confetti bursts from the hand, +points pops by the hand
+// then flies to the score, and the score ticks up when it lands.
+function celebrate(points) {
+  fx.innerHTML = SWOOSH;
+  const colors = ["#7cff14", "#ffe14a", "#ffffff", "#41d300"];
+  for (let i = 0; i < 28; i++) {
+    const bit = el("i", "bit");
+    const angle = (i / 28) * Math.PI * 2 + Math.random() * 0.4;
+    const reach = 120 + Math.random() * 120;
+    bit.style.setProperty("--dx", `${Math.cos(angle) * reach}px`);
+    bit.style.setProperty("--dy", `${Math.sin(angle) * reach - 40}px`);
+    bit.style.setProperty("--r", `${Math.random() * 720 - 360}deg`);
+    bit.style.background = colors[i % colors.length];
+    fx.append(bit);
   }
-  if (kind === "success") {
-    panel.append(successBanner());
-    say(`Success! +${state.feedback.points}`);
-    return;
-  }
-  // The how-to stays up the whole time: the blanks hide the letter, this says how to make it.
-  panel.append(coach(HOW[letter]), slots(), meterRow());
-  if (camFailed) panel.append(holdButton());
-  const warn = trouble();
-  if (warn) panel.append(warn);
-  say(kind === "almost" ? state.feedback.text : `Sign ${letter}`);
+  pop.textContent = `+${points}`;
+  pop.hidden = false;
+  pop.classList.remove("fly");
+  void pop.offsetWidth;
+  const score = hud.querySelector(".score");
+  window.setTimeout(() => {
+    if (!score) return;
+    const from = pop.getBoundingClientRect();
+    const to = score.getBoundingClientRect();
+    pop.style.setProperty("--fx", `${to.right - from.right - 10}px`);
+    pop.style.setProperty("--fy", `${to.top - from.top}px`);
+    pop.classList.add("fly");
+  }, 480);
+  window.setTimeout(() => {
+    if (!score?.isConnected) return;
+    score.textContent = `Score: ${money(state.points)}`;
+    score.classList.add("bump");
+  }, 860);
+  window.setTimeout(() => {
+    fx.innerHTML = "";
+  }, FLASH_MS);
 }
 
 function holdButton() {
@@ -258,63 +357,66 @@ function money(n) {
   return n.toLocaleString("en-US");
 }
 
-function sumLine(count, label, mult) {
+function sumLine(count, label, mult, i) {
   const row = el("p", "sumline");
+  row.style.setProperty("--i", i);
   row.append(document.createTextNode(`${count} ${label}`), el("i", "mx", `${mult}x`));
   return row;
 }
 
-function nameKeys() {
-  const keys = el("div", "keys");
-  for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-    const key = el("button", "", ch);
-    key.type = "button";
-    key.dataset.act = "key";
-    key.dataset.key = ch;
-    keys.append(key);
-  }
-  const back = el("button", "wide", "Delete");
-  back.type = "button";
-  back.dataset.act = "key";
-  back.dataset.key = "back";
-  const save = el("button", "wide", "Save");
-  save.type = "button";
-  save.dataset.act = "save";
-  keys.append(back, save);
-  return keys;
+function plus(i) {
+  const node = el("p", "sumplus", "+");
+  node.style.setProperty("--i", i);
+  return node;
 }
 
 function drawSummary() {
   const score = breakdown(state);
   setGhost("A", "guide");
-  const title = el("h1", "sumtitle", "Translation Summary");
+  const title = el("h1", "sumribbon");
+  title.append(el("span", "", "SpellBound Summary"));
   const quote = el("p", "sumquote", `“${state.line.text}”`);
   const stack = el("div", "sumstack");
   stack.append(
-    sumLine(score.letters, "letters", score.letterMult),
-    el("p", "sumplus", "+"),
-    sumLine(score.words, "words", score.wordMult),
-    el("p", "sumplus", "+"),
-    sumLine(1, "sentence", score.sentenceMult),
-    el("p", "sumtotal", `${money(score.total)} points`),
+    sumLine(score.letters, score.letters === 1 ? "letter" : "letters", score.letterMult, 0),
+    plus(1),
+    sumLine(score.words, score.words === 1 ? "word" : "words", score.wordMult, 2),
+    plus(3),
+    sumLine(score.sentence, "sentence", score.sentenceMult, 4),
   );
+  const total = el("p", "sumtotal");
+  total.style.setProperty("--i", 5);
+  total.append(el("b", "", money(score.total)), " points");
+  stack.append(total);
   panel.append(title, quote, stack);
   if (!state.saved) {
     panel.append(el("p", "sumhint", "Add name and save progress"));
-    const name = el("button", "name", state.name || "Name");
-    name.type = "button";
-    name.dataset.act = "publish";
-    panel.append(name);
-    if (naming) panel.append(nameKeys());
-    if (status.startsWith("Type at least")) panel.append(el("p", "hint", status));
+    const form = el("form", "nameform");
+    form.dataset.act = "saveform";
+    const input = el("input", "name");
+    input.name = "name";
+    input.placeholder = "Name";
+    input.autocomplete = "off";
+    input.maxLength = 14;
+    input.value = draftName;
+    input.setAttribute("aria-label", "Your name for the leaderboard");
+    const go = el("button", "publish", "Publish Score");
+    go.type = "submit";
+    form.append(input, go);
+    panel.append(form);
+    if (nameError) panel.append(el("p", "hint", nameError));
+    window.setTimeout(() => input.focus({ preventScroll: true }), 50);
   } else {
-    panel.append(el("p", "sumhint", state.streak > 1
-      ? `Day ${state.streak}. Log everyday and create a streak multiplier.`
-      : "Log everyday and create a streak multiplier."));
-    panel.append(board());
-    panel.append(ribbon("Match up!", "again"));
+    const streak = el("p", "streak");
+    streak.append(
+      state.streak > 1 ? `Day ${state.streak}! Log everyday & create a streak multiplier!` : "Log everyday & create a streak multiplier!",
+      el("i", "mx", `${Math.min(5, state.streak)}x`),
+    );
+    panel.append(streak);
   }
-  say(`Translation summary. ${money(score.total)} points.`);
+  panel.append(board("list"));
+  if (state.saved) panel.append(ribbon("Match up!", "again"));
+  say(`Summary. ${money(score.total)} points.`);
 }
 
 function setMode(mode) {
@@ -369,7 +471,10 @@ function beginPlay() {
   sawHandAt = 0;
   prevLm = null;
   nextLm = null;
-  dispatch(begin(fixedLine || randomLine()));
+  const line = fixedLine || randomLine(lastLineId);
+  lastLineId = line.id;
+  wordShown = -1;
+  dispatch(begin(line));
   startHand(onStatus, onLandmarks);
   navigator.wakeLock?.request("screen").catch(() => {});
 }
@@ -388,36 +493,37 @@ async function onMatch() {
 }
 
 function finishFlash() {
+  pop.hidden = true;
+  pop.classList.remove("fly");
   dispatch(advance(state));
   lockUntil = performance.now() + 220;
   holdStart = 0;
   recent = [];
   trail = [];
   wordHits = 0;
-  if (state.phase === "summary") naming = false;
+  if (state.phase === "summary") draftName = "";
 }
 
 function backToStart() {
-  naming = false;
   note = "";
   status = camOn ? "Hold up your pointer finger to start." : "Tap Match up!";
   dispatch(attract());
 }
 
 async function saveScore() {
-  const next = markSaved(state);
-  if (next === state) {
-    status = "Type at least two letters.";
+  if (!validName(draftName)) {
+    nameError = "Type a name: 2 to 14 letters, like Elaina G.";
+    lastPaint = "";
     render();
     return;
   }
+  const next = markSaved(setName(state, draftName));
   const saved = record(store, data, next.name, breakdown(next).total, today);
   data = saved.data;
   const remote = await pushScore(next.name, breakdown(next).total, today);
   if (remote) data = { ...data, scores: remote };
   note = "";
-  naming = false;
-  status = "";
+  nameError = "";
   dispatch({ ...next, streak: saved.streak });
 }
 
@@ -428,14 +534,21 @@ stage.addEventListener("click", (event) => {
   const act = button.dataset.act;
   if (act === "match") onMatch();
   if (act === "start") beginPlay();
-  if (act === "publish") {
-    naming = true;
-    status = "";
-    render();
-  }
+  if (act === "finish") dispatch(finishEarly(state));
   if (act === "again") backToStart();
-  if (act === "key") dispatch(typeName(state, button.dataset.key));
-  if (act === "save") saveScore();
+});
+
+stage.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveScore();
+});
+
+// The name box is typed into directly; no re-render per key, so the caret never jumps.
+stage.addEventListener("input", (event) => {
+  if (event.target.name !== "name") return;
+  const clean = setName({ phase: "summary", saved: false }, event.target.value).name;
+  if (clean !== event.target.value) event.target.value = clean;
+  draftName = clean;
 });
 
 stage.addEventListener("pointerdown", (event) => {
@@ -456,10 +569,6 @@ window.addEventListener("keydown", (event) => {
     flashTimer = window.setTimeout(finishFlash, FLASH_MS);
     return;
   }
-  if (state.phase !== "summary" || state.saved) return;
-  if (event.key === "Backspace") dispatch(typeName(state, "back"));
-  else if (/^[a-zA-Z]$/.test(event.key)) dispatch(typeName(state, event.key.toUpperCase()));
-  else if (event.key === "Enter") saveScore();
 });
 
 // The last WORD_WINDOW_MS of hand points, linearly resampled to the 60 even frames the model expects.

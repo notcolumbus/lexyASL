@@ -1,11 +1,5 @@
-const SEED = [
-  { name: "PALM", points: 2800, day: "seed" },
-  { name: "INK", points: 2100, day: "seed" },
-  { name: "LOOP", points: 1600, day: "seed" },
-];
-
 export function emptyData() {
-  return { scores: SEED.map((row) => ({ ...row })), streaks: {} };
+  return { scores: [], streaks: {} };
 }
 
 export function load(store) {
@@ -16,10 +10,13 @@ export function load(store) {
   return { scores: raw.scores.slice(), streaks: { ...raw.streaks } };
 }
 
+// Each player once, at their best: same as the server's board.
 export function top(data, count) {
+  const seen = new Set();
   return data.scores
     .slice()
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
+    .filter((row) => !seen.has(row.name.toLowerCase()) && seen.add(row.name.toLowerCase()))
     .slice(0, count);
 }
 
@@ -79,7 +76,7 @@ export async function pushScore(name, points, day) {
 }
 
 export function browserStore() {
-  const key = "spellbound.v1";
+  const key = "spellbound.v2";
   return {
     get() {
       try {

@@ -12,12 +12,8 @@ function memory() {
   };
 }
 
-test("an empty store shows the seed board", () => {
-  const data = load(memory());
-  assert.deepEqual(
-    top(data, 3).map((row) => row.name),
-    ["PALM", "INK", "LOOP"],
-  );
+test("an empty store shows an empty board, not made-up names", () => {
+  assert.deepEqual(top(load(memory()), 3), []);
 });
 
 test("a score from the next day grows the streak and a gap resets it", () => {

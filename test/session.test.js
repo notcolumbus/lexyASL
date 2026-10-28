@@ -13,7 +13,8 @@ import {
   popped,
   targetLetter,
   targetWord,
-  typeName,
+  setName,
+  finishEarly,
   WORD_SIGNS,
 } from "../public/js/session.js";
 
@@ -31,7 +32,7 @@ test("each word is spelled, then signed, and the line scores every step", () => 
     const letters = line.words.join("").length;
     assert.equal(state.points, letters * 200 + line.words.length * 400);
     const score = breakdown(state);
-    assert.equal(score.total, letters * 400 + line.words.length * 400 + 800);
+    assert.equal(score.total, letters * 400 + line.words.length * 600 + 2000);
     assert.ok(score.total <= 10000, String(score.total));
     assert.equal(meter(state), 1);
   }
@@ -72,19 +73,39 @@ test("the third letter pops the background", () => {
   assert.equal(popped(state), true);
 });
 
-test("a name saves once and ignores a short name", () => {
+test("a name saves once, as written, and ignores a too-short name", () => {
   let state = begin(LINES[0]);
   while (state.phase === "play") state = advance(accept(state));
   assert.equal(markSaved(state), state);
-  state = typeName(state, "A");
+  state = setName(state, "E");
   assert.equal(markSaved(state), state);
-  state = typeName(typeName(state, "D"), "A");
-  state = markSaved(state);
+  state = setName(state, "Elaina G.<b>");
+  assert.equal(state.name, "Elaina G.b");
+  state = markSaved(setName(state, "Elaina G."));
   assert.equal(state.saved, true);
-  assert.equal(state.name, "ADA");
-  assert.equal(typeName(state, "Z"), state);
+  assert.equal(state.name, "Elaina G.");
+  assert.equal(setName(state, "Zed"), state);
+});
+
+test("publishing mid-round scores only what was signed", () => {
+  let state = begin(LINES[0]);
+  state = advance(accept(state));
+  state = advance(accept(state));
+  const done = finishEarly(state);
+  assert.equal(done.phase, "summary");
+  const score = breakdown(done);
+  assert.equal(score.letters, 2);
+  assert.equal(score.words, 0);
+  assert.equal(score.sentence, 0);
+  assert.equal(score.total, 2 * 200);
+  assert.equal(finishEarly(begin(LINES[0])).phase, "play");
 });
 
 test("attract has no play fields", () => {
   assert.equal(attract().phase, "attract");
+});
+
+test("the sentence bank has six lines and skips the letters the model reads worst", () => {
+  assert.equal(LINES.length, 6);
+  for (const line of LINES) assert.doesNotMatch(line.words.join(""), /[ACDUVJZ]/, line.text);
 });

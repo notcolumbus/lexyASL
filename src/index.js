@@ -49,7 +49,7 @@ export default {
         return json({ error: "Expected a JSON body." }, 400);
       }
       const entry = parseEntry(body, todayUtc(new Date()));
-      if (!entry) return json({ error: "Use a 2 to 12 letter name and a score up to 10000." }, 400);
+      if (!entry) return json({ error: "Use a 2 to 14 character name (letters, spaces, . ' -) and a score up to 10000." }, 400);
       const board = await writeScore(env.BOARD, entry);
       return json(publicBoard(board));
     }
