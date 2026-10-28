@@ -21,7 +21,8 @@ import {
 } from "./session.js";
 import { browserStore, load, pullScores, pushScore, record, todayKey, top } from "./storage.js";
 
-const HOLD_MS = 0;
+// A letter must stay right this long before it counts, so a hand passing through a shape doesn't score.
+const HOLD_MS = 350;
 const FLASH_MS = 400;
 const ATTRACT_HOLD_MS = 320;
 // Word step: the sign's handshape held this long, plus this much wrist travel (in frame widths).
@@ -497,7 +498,7 @@ function tick(now) {
     return;
   }
   const result = judgeFrames(recent, targetLetter(state));
-  if (result.score >= SUCCESS_SCORE) {
+  if (result.score >= SUCCESS_SCORE && recent.length >= 3) {
     if (!holdStart) holdStart = now;
     setMode("ok");
     if (now - holdStart >= HOLD_MS) {

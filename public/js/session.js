@@ -1,26 +1,17 @@
 // Every word has a one-hand ASL sign the camera can check: its handshape plus some movement.
 export const LINES = [
-  { id: "happy", text: "I am happy", words: ["I", "AM", "HAPPY"] },
-  { id: "food", text: "We eat food", words: ["WE", "EAT", "FOOD"] },
-  { id: "water", text: "I love water", words: ["I", "LOVE", "WATER"] },
-  { id: "cats", text: "Big cats play", words: ["BIG", "CATS", "PLAY"] },
-  { id: "good", text: "I eat good food", words: ["I", "EAT", "GOOD", "FOOD"] },
+  { id: "apples", text: "I like apples", words: ["I", "LIKE", "APPLES"] },
+  { id: "happy", text: "I'm so happy", words: ["IM", "SO", "HAPPY"] },
 ];
 
 // hand: the alphabet handshape the sign uses. how: what to do with it.
 export const WORD_SIGNS = {
   I: { hand: "I", how: "Hold your I hand against your chest." },
-  AM: { hand: "A", how: "A hand at your lips, then move it forward." },
+  IM: { hand: "I", how: "Hold your I hand against your chest." },
+  LIKE: { hand: "B", how: "Open hand on your chest, pull it away as your middle finger and thumb pinch." },
+  APPLES: { hand: "X", how: "Hooked pointer at your cheek, twist it." },
+  SO: { hand: "V", how: "V hands touch, then pull apart (the sign for VERY)." },
   HAPPY: { hand: "B", how: "Flat hand brushes up your chest, twice." },
-  WE: { hand: "D", how: "Pointer taps one shoulder, then the other." },
-  EAT: { hand: "O", how: "Bunch your fingers and tap your mouth." },
-  FOOD: { hand: "O", how: "Bunch your fingers and tap your mouth, twice." },
-  LOVE: { hand: "S", how: "Cross your fists over your heart." },
-  WATER: { hand: "W", how: "Tap your W hand on your chin." },
-  BIG: { hand: "L", how: "L hand, pull it out wide." },
-  CATS: { hand: "F", how: "F hand at your cheek, pull out like whiskers." },
-  PLAY: { hand: "Y", how: "Y hand, shake it side to side." },
-  GOOD: { hand: "B", how: "Flat hand from your chin, move it forward." },
 };
 
 export function randomLine() {

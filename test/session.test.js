@@ -64,7 +64,7 @@ test("an almost does not clear a letter", () => {
 });
 
 test("the third letter pops the background", () => {
-  let state = begin(LINES.find((line) => line.words[0].length >= 3));
+  let state = begin({ id: "abc", text: "abc", words: ["ABC"] });
   state = advance(accept(state));
   state = advance(accept(state));
   assert.equal(popped(state), false);
